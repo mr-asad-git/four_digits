@@ -35,13 +35,11 @@ function generateRoomCode() {
 }
 
 // ── Guess validation ──────────────────────────────────────────────
-// Returns array of 'green' | 'yellow' | 'red' for each digit position
 function checkGuess(secret, guess) {
     const result = ['red', 'red', 'red', 'red'];
     const secretCopy = [...secret];
     const guessCopy = [...guess];
 
-    // First pass: correct position → green
     for (let i = 0; i < 4; i++) {
         if (guessCopy[i] === secretCopy[i]) {
             result[i] = 'green';
@@ -49,7 +47,6 @@ function checkGuess(secret, guess) {
             guessCopy[i] = null;
         }
     }
-    // Second pass: correct digit, wrong position → yellow
     for (let i = 0; i < 4; i++) {
         if (guessCopy[i] !== null) {
             const idx = secretCopy.indexOf(guessCopy[i]);
@@ -65,24 +62,36 @@ function checkGuess(secret, guess) {
 // ── Game state helpers ────────────────────────────────────────────
 function initGameState(players) {
     const history = {};
-    players.forEach(p => { history[p.id] = []; });
+    // Only original players (not spectators) get history slots
+    players.forEach(p => { if (!p.spectator) history[p.id] = []; });
     return {
-        targetQueue: players.map(p => p.id), // who gets guessed, in order
+        targetQueue: players.filter(p => !p.spectator).map(p => p.id),
         currentTargetId: null,
         roundNumber: 0,
-        roundGuesses: {},      // { guesserSocketId: { guess, result, correct } }
-        guessHistory: history, // { playerId: [{ guess, result, targetId, targetName, round }] }
+        roundGuesses: {},
+        guessHistory: history,
         eliminatedIds: [],
-        submittedIds: [],      // who submitted this round
+        submittedIds: [],
         timer: null,
     };
 }
 
+// Active guessers = connected, not the target, not eliminated, not spectator
 function getActiveGuessers(room) {
     const gs = room.gameState;
-    return room.players.filter(
-        p => p.id !== gs.currentTargetId && !gs.eliminatedIds.includes(p.id)
+    return room.players.filter(p =>
+        p.id !== gs.currentTargetId &&
+        !gs.eliminatedIds.includes(p.id) &&
+        !p.disconnected &&
+        !p.spectator
     );
+}
+
+// ── Broadcast helper — sends current player list to whole room ────
+function broadcastPlayerStatus(roomCode) {
+    const room = rooms[roomCode];
+    if (!room) return;
+    io.to(roomCode).emit('player-status-changed', { players: room.players });
 }
 
 function startRound(roomCode) {
@@ -90,21 +99,21 @@ function startRound(roomCode) {
     if (!room || !room.gameState) return;
     const gs = room.gameState;
 
-    // Pick next non-eliminated target
+    // Pick next non-eliminated, non-disconnected target
     let targetId = null;
     while (gs.targetQueue.length > 0) {
         const candidate = gs.targetQueue.shift();
-        if (!gs.eliminatedIds.includes(candidate)) {
+        const p = room.players.find(pl => pl.id === candidate);
+        if (!gs.eliminatedIds.includes(candidate) && p && !p.spectator) {
             targetId = candidate;
             break;
         }
     }
 
-    // If queue empty, refill from active players for next cycle
+    // Refill queue from active (connected or not — they may reconnect) non-eliminated non-spectator players
     if (!targetId) {
-        const active = room.players.filter(p => !gs.eliminatedIds.includes(p.id));
+        const active = room.players.filter(p => !gs.eliminatedIds.includes(p.id) && !p.spectator);
         if (active.length <= 1) {
-            // Game over
             const winner = active[0] || null;
             io.to(roomCode).emit('game-over', {
                 winnerId: winner?.id || null,
@@ -114,13 +123,7 @@ function startRound(roomCode) {
             return;
         }
         gs.targetQueue = active.map(p => p.id);
-        // shift first for this cycle
-        const next = gs.targetQueue.shift();
-        if (!gs.eliminatedIds.includes(next)) targetId = next;
-        else {
-            // Edge case: just pick first active
-            targetId = active[0].id;
-        }
+        targetId = gs.targetQueue.shift();
     }
 
     gs.currentTargetId = targetId;
@@ -131,7 +134,6 @@ function startRound(roomCode) {
     const target = room.players.find(p => p.id === targetId);
     const expiresAt = Date.now() + ROUND_TIME_MS;
 
-    // Clear old timer
     if (gs.timer) clearTimeout(gs.timer);
     gs.timer = setTimeout(() => completeRound(roomCode), ROUND_TIME_MS);
 
@@ -141,7 +143,7 @@ function startRound(roomCode) {
         roundNumber: gs.roundNumber,
         expiresAt,
         activePlayers: room.players
-            .filter(p => !gs.eliminatedIds.includes(p.id))
+            .filter(p => !gs.eliminatedIds.includes(p.id) && !p.spectator)
             .map(p => p.id),
     });
 
@@ -156,9 +158,12 @@ function completeRound(roomCode) {
     if (gs.timer) { clearTimeout(gs.timer); gs.timer = null; }
 
     const target = room.players.find(p => p.id === gs.currentTargetId);
-    if (!target) return;
+    if (!target) {
+        // Target vanished entirely — just advance
+        setTimeout(() => startRound(roomCode), 5000);
+        return;
+    }
 
-    // Build results array
     const results = Object.entries(gs.roundGuesses).map(([guesserSocketId, data]) => {
         const guesser = room.players.find(p => p.id === guesserSocketId);
         return {
@@ -170,7 +175,6 @@ function completeRound(roomCode) {
         };
     });
 
-    // Update guess history per player
     results.forEach(r => {
         if (!gs.guessHistory[r.guesserSocketId]) gs.guessHistory[r.guesserSocketId] = [];
         gs.guessHistory[r.guesserSocketId].push({
@@ -182,14 +186,12 @@ function completeRound(roomCode) {
         });
     });
 
-    // Check if target was eliminated (anyone guessed correctly)
     const targetEliminated = results.some(r => r.correct);
     if (targetEliminated && !gs.eliminatedIds.includes(gs.currentTargetId)) {
         gs.eliminatedIds.push(gs.currentTargetId);
     }
 
-    // Check game over: only 1 active player left
-    const activePlayers = room.players.filter(p => !gs.eliminatedIds.includes(p.id));
+    const activePlayers = room.players.filter(p => !gs.eliminatedIds.includes(p.id) && !p.spectator);
     const gameOver = activePlayers.length <= 1;
     const winner = gameOver ? activePlayers[0] : null;
 
@@ -212,11 +214,10 @@ function completeRound(roomCode) {
         return;
     }
 
-    // Auto-start next round after 5 seconds (so players can see results)
     setTimeout(() => startRound(roomCode), 5000);
 }
 
-// ── REST ─────────────────────────────────────────────────────────
+// ── REST ──────────────────────────────────────────────────────────
 app.get('/server-info', (req, res) => {
     res.json({ ip: localIP, port: PORT });
 });
@@ -230,10 +231,10 @@ io.on('connection', (socket) => {
             .filter(([, room]) => !room.started)
             .map(([code, room]) => ({
                 code,
-                playerCount: room.players.length,
+                playerCount: room.players.filter(p => !p.disconnected).length,
                 maxPlayers: MAX_PLAYERS,
                 hostName: room.players[0]?.name || 'Unknown',
-                isFull: room.players.length >= MAX_PLAYERS,
+                isFull: room.players.filter(p => !p.disconnected).length >= MAX_PLAYERS,
             }));
         callback({ rooms: openRooms });
     });
@@ -242,7 +243,7 @@ io.on('connection', (socket) => {
         const roomCode = generateRoomCode();
         rooms[roomCode] = {
             host: socket.id,
-            players: [{ id: socket.id, name: playerName, ready: false, digits: null }],
+            players: [{ id: socket.id, name: playerName, ready: false, digits: null, disconnected: false, spectator: false }],
             started: false,
         };
         socket.join(roomCode);
@@ -256,9 +257,90 @@ io.on('connection', (socket) => {
     socket.on('join-room', ({ roomCode, playerName }, callback) => {
         const room = rooms[roomCode];
         if (!room) return callback({ success: false, error: 'Room not found.' });
-        if (room.started) return callback({ success: false, error: 'Game has already started.' });
-        if (room.players.length >= MAX_PLAYERS) return callback({ success: false, error: `Room is full (max ${MAX_PLAYERS}).` });
-        room.players.push({ id: socket.id, name: playerName, ready: false, digits: null });
+
+        // ── If game is running, join as spectator ─────────────────
+        if (room.started) {
+            // Check if this player was originally in the game (by name) — if so, redirect to rejoin
+            const existingSlot = room.players.find(p => p.name === playerName && p.disconnected);
+            if (existingSlot) {
+                // Treat as a reconnect
+                const oldId = existingSlot.id;
+                existingSlot.id = socket.id;
+                existingSlot.disconnected = false;
+                socket.join(roomCode);
+                socket.data.roomCode = roomCode;
+                socket.data.playerName = playerName;
+                socket.data.isHost = (room.host === oldId);
+                if (socket.data.isHost) room.host = socket.id;
+
+                // Update guessHistory key to new socket id if needed
+                if (room.gameState?.guessHistory[oldId]) {
+                    room.gameState.guessHistory[socket.id] = room.gameState.guessHistory[oldId];
+                    delete room.gameState.guessHistory[oldId];
+                }
+                // Update submittedIds
+                if (room.gameState) {
+                    const si = room.gameState.submittedIds.indexOf(oldId);
+                    if (si !== -1) room.gameState.submittedIds[si] = socket.id;
+                    const ri = room.gameState.eliminatedIds.indexOf(oldId);
+                    if (ri !== -1) room.gameState.eliminatedIds[ri] = socket.id;
+                    if (room.gameState.currentTargetId === oldId) room.gameState.currentTargetId = socket.id;
+                    const tq = room.gameState.targetQueue.indexOf(oldId);
+                    if (tq !== -1) room.gameState.targetQueue[tq] = socket.id;
+                    const rg = room.gameState.roundGuesses[oldId];
+                    if (rg) { room.gameState.roundGuesses[socket.id] = rg; delete room.gameState.roundGuesses[oldId]; }
+                }
+
+                broadcastPlayerStatus(roomCode);
+
+                // Send full state sync to reconnected player
+                const gs = room.gameState;
+                socket.emit('game-state-sync', {
+                    players: room.players,
+                    phase: gs ? 'guessing' : 'waiting',
+                    currentTargetId: gs?.currentTargetId || null,
+                    currentTargetName: room.players.find(p => p.id === gs?.currentTargetId)?.name || '',
+                    roundNumber: gs?.roundNumber || 0,
+                    guessHistory: gs?.guessHistory || {},
+                    activePlayers: room.players.filter(p => !gs?.eliminatedIds.includes(p.id) && !p.spectator).map(p => p.id),
+                    eliminatedIds: gs?.eliminatedIds || [],
+                    submittedIds: gs?.submittedIds || [],
+                });
+
+                console.log(`[Room] ${playerName} RE-JOINED room ${roomCode}`);
+                return callback({ success: true, roomCode, players: room.players, isHost: socket.data.isHost, rejoined: true });
+            }
+
+            // New joiner — add as spectator
+            room.players.push({ id: socket.id, name: playerName, ready: true, digits: null, disconnected: false, spectator: true });
+            socket.join(roomCode);
+            socket.data.roomCode = roomCode;
+            socket.data.playerName = playerName;
+            socket.data.isHost = false;
+            broadcastPlayerStatus(roomCode);
+
+            const gs = room.gameState;
+            socket.emit('game-state-sync', {
+                players: room.players,
+                phase: gs ? 'guessing' : 'waiting',
+                currentTargetId: gs?.currentTargetId || null,
+                currentTargetName: room.players.find(p => p.id === gs?.currentTargetId)?.name || '',
+                roundNumber: gs?.roundNumber || 0,
+                guessHistory: gs?.guessHistory || {},
+                activePlayers: room.players.filter(p => !gs?.eliminatedIds.includes(p.id) && !p.spectator).map(p => p.id),
+                eliminatedIds: gs?.eliminatedIds || [],
+                submittedIds: gs?.submittedIds || [],
+            });
+
+            console.log(`[Room] ${playerName} joined room ${roomCode} as SPECTATOR`);
+            return callback({ success: true, roomCode, players: room.players, isHost: false, spectator: true });
+        }
+
+        if (room.players.filter(p => !p.disconnected).length >= MAX_PLAYERS) {
+            return callback({ success: false, error: `Room is full (max ${MAX_PLAYERS}).` });
+        }
+
+        room.players.push({ id: socket.id, name: playerName, ready: false, digits: null, disconnected: false, spectator: false });
         socket.join(roomCode);
         socket.data.roomCode = roomCode;
         socket.data.playerName = playerName;
@@ -300,7 +382,6 @@ io.on('connection', (socket) => {
         io.to(roomCode).emit('game-started', { players: room.players });
         console.log(`[Game] Starting in room ${roomCode} with ${room.players.length} players`);
 
-        // First round starts after transition animation
         setTimeout(() => startRound(roomCode), 3500);
     });
 
@@ -311,10 +392,11 @@ io.on('connection', (socket) => {
         if (!room?.gameState) return;
         const gs = room.gameState;
 
-        // Must be an active guesser (not the target, not eliminated)
+        const player = room.players.find(p => p.id === socket.id);
+        if (!player || player.spectator) return;
         if (socket.id === gs.currentTargetId) return;
         if (gs.eliminatedIds.includes(socket.id)) return;
-        if (gs.submittedIds.includes(socket.id)) return; // already submitted
+        if (gs.submittedIds.includes(socket.id)) return;
 
         const target = room.players.find(p => p.id === gs.currentTargetId);
         if (!target?.digits) return;
@@ -325,7 +407,6 @@ io.on('connection', (socket) => {
         gs.roundGuesses[socket.id] = { guess, result, correct };
         gs.submittedIds.push(socket.id);
 
-        // Broadcast who submitted (without revealing the guess yet)
         const submitter = room.players.find(p => p.id === socket.id);
         io.to(roomCode).emit('guess-made', {
             guesserSocketId: socket.id,
@@ -336,7 +417,6 @@ io.on('connection', (socket) => {
 
         console.log(`[Game] ${socket.data.playerName} guessed in room ${roomCode}`);
 
-        // If all active guessers submitted, complete round early
         if (gs.submittedIds.length >= getActiveGuessers(room).length) {
             completeRound(roomCode);
         }
@@ -345,17 +425,37 @@ io.on('connection', (socket) => {
     // ── Disconnect ───────────────────────────────────────────────
     socket.on('disconnect', () => {
         const { roomCode, isHost } = socket.data;
-        if (!roomCode || !rooms[roomCode]) return;
+        if (!roomCode || !rooms[roomCode]) {
+            console.log(`[-] Disconnected (no room): ${socket.id}`);
+            return;
+        }
         const room = rooms[roomCode];
+        console.log(`[-] Disconnected: ${socket.data.playerName} (${socket.id}) from room ${roomCode}`);
 
         if (room.started) {
-            room.players = room.players.filter(p => p.id !== socket.id);
-            // If they were supposed to guess this round, check if round should complete
-            if (room.gameState) {
-                const gs = room.gameState;
-                if (!gs.eliminatedIds.includes(socket.id) && socket.id !== gs.currentTargetId) {
+            // Mark as disconnected — do NOT remove from roster
+            const player = room.players.find(p => p.id === socket.id);
+            if (player) player.disconnected = true;
+
+            broadcastPlayerStatus(roomCode);
+
+            const gs = room.gameState;
+            if (gs) {
+                // If the target just disconnected, auto-complete the round
+                if (socket.id === gs.currentTargetId) {
+                    console.log(`[Game] Target ${socket.data.playerName} disconnected — completing round early.`);
+                    if (gs.timer) { clearTimeout(gs.timer); gs.timer = null; }
+                    completeRound(roomCode);
+                    return;
+                }
+
+                // If they were an active guesser who hadn't submitted, check if all remaining submitted
+                if (!gs.eliminatedIds.includes(socket.id) && !player?.spectator) {
                     const guessers = getActiveGuessers(room);
                     if (guessers.length > 0 && gs.submittedIds.length >= guessers.length) {
+                        completeRound(roomCode);
+                    } else if (guessers.length === 0) {
+                        // Nobody left to guess — complete the round
                         completeRound(roomCode);
                     }
                 }
@@ -363,6 +463,7 @@ io.on('connection', (socket) => {
             return;
         }
 
+        // ── Pre-game lobby ────────────────────────────────────────
         room.players = room.players.filter(p => p.id !== socket.id);
         if (room.players.length === 0 || isHost) {
             io.to(roomCode).emit('room-closed', { reason: 'Host left the lobby.' });
@@ -370,7 +471,7 @@ io.on('connection', (socket) => {
         } else {
             io.to(roomCode).emit('lobby-update', { players: room.players });
         }
-        console.log(`[-] Disconnected: ${socket.id}`);
+        console.log(`[-] ${socket.data.playerName} removed from lobby ${roomCode}`);
     });
 });
 

@@ -30,7 +30,7 @@ const JoinLobby = ({ userName, onGameStart, onExit }) => {
         // Connect via Vite proxy — auto-works for all LAN players
         // Allow polling+websocket negotiation — polling first prevents the
         // 'WebSocket closed before connection established' warning from the Vite proxy
-        const socket = io({ timeout: 6000 })
+        const socket = io({ timeout: 6000, extraHeaders: { 'ngrok-skip-browser-warning': 'true' } })
         socketRef.current = socket
 
         socket.on('connect', () => {
@@ -74,6 +74,20 @@ const JoinLobby = ({ userName, onGameStart, onExit }) => {
         socket.emit('join-room', { roomCode: finalCode, playerName: userName }, (res) => {
             setConnecting(false)
             if (res.success) {
+                // If the game is already running, jump straight to GameScreen
+                if (res.spectator || res.rejoined) {
+                    transitioningRef.current = true
+                    setTimeout(() => onGameStart({
+                        players: res.players,
+                        socket,
+                        isHost: res.isHost || false,
+                        roomCode: finalCode,
+                        spectator: res.spectator || false,
+                        rejoined: res.rejoined || false,
+                    }), 300)
+                    return
+                }
+
                 setRoomCode(finalCode)
                 roomCodeRef.current = finalCode
                 setPlayers(res.players)
@@ -113,12 +127,15 @@ const JoinLobby = ({ userName, onGameStart, onExit }) => {
                         socket,
                         isHost: false,
                         roomCode: roomCodeRef.current,
+                        spectator: false,
+                        rejoined: false,
                     }), 300)
                 })
             } else {
                 setError(res.error || 'Failed to join room.')
             }
         })
+
     }
 
     const handleDigitsChosen = (digits) => {

@@ -6,12 +6,11 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
     host: true, // expose on LAN
+    allowedHosts: true, // allow any host (like ngrok) to access the dev server
     proxy: {
-      // Any request to /socket.io is forwarded to the game server.
-      // This means clients ONLY need the Vite port (5173) - no more port 4000.
       '/socket.io': {
         target: 'http://localhost:4000',
-        ws: true,          // enable WebSocket proxying
+        ws: true,
         changeOrigin: true,
       },
     },

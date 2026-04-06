@@ -24,7 +24,7 @@ const HostLobby = ({ userName, onGameStart, onExit }) => {
         // Connect via Vite proxy — no port needed, works for all LAN players
         // Allow polling+websocket negotiation — polling first prevents the
         // 'WebSocket closed before connection established' warning from the Vite proxy
-        const socket = io()
+        const socket = io({ extraHeaders: { 'ngrok-skip-browser-warning': 'true' } })
         socketRef.current = socket
 
         socket.on('connect', () => {

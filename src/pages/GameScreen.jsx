@@ -11,35 +11,98 @@ const RESULT_COLORS = {
 }
 
 // ── History Modal ────────────────────────────────────────────────
-const HistoryModal = ({ player, history, onClose }) => {
+// 'history' = receivedGuesses for this player: [{guesserName, guess, result, round}]
+const HistoryModal = ({ player, history, onClose, isMe }) => {
+    const [expandedGuesser, setExpandedGuesser] = useState(null);
+    const [showMyCode, setShowMyCode] = useState(false);
+
+    // Group by guesser name
+    const grouped = history.reduce((acc, entry) => {
+        const key = entry.guesserName || 'Unknown';
+        if (!acc[key]) acc[key] = [];
+        acc[key].push(entry);
+        return acc;
+    }, {});
+    const guessers = Object.keys(grouped);
+
     return (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
-            <div className="bg-white rounded-3xl p-6 shadow-2xl border-b-8 border-green-700/30 w-full max-w-sm flex flex-col max-h-[80vh]" onClick={e => e.stopPropagation()}>
+            <div className="bg-white rounded-3xl p-6 shadow-2xl border-b-8 border-green-700/30 w-full max-w-sm flex flex-col max-h-[85vh]" onClick={e => e.stopPropagation()}>
                 <div className="flex justify-between items-center mb-4">
-                    <h3 className="bungee-font text-green-800 text-lg">{player.name}'S HISTORY</h3>
-                    <button onClick={onClose} className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-600 flex items-center justify-center text-sm transition-all focus:outline-none">✕</button>
+                    <div>
+                        <h3 className="bungee-font text-green-800 text-lg">{player.name}'S HISTORY</h3>
+                        <p className="text-gray-400 text-[10px] bungee-font tracking-wider">GUESSES OTHERS MADE ABOUT {player.name.toUpperCase()}</p>
+                    </div>
+                    <button onClick={onClose} className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-600 flex items-center justify-center text-sm transition-all focus:outline-none flex-shrink-0">✕</button>
                 </div>
-                
-                <div className="flex flex-col overflow-y-auto pr-1">
-                    {history.length === 0 && <p className="text-gray-400 bungee-font text-center py-6 text-sm">No guesses yet.</p>}
-                    {history.map((entry, i) => (
-                        <div key={i} className="flex items-center justify-between bg-gray-50 border-2 border-gray-100 rounded-xl p-3 mb-2">
-                            <div className="flex flex-col">
-                                <span className="text-gray-400 text-[10px] bungee-font tracking-wider">RD {entry.round}</span>
-                                <span className="text-green-700 text-xs font-bold truncate max-w-[90px]">vs {entry.targetName}</span>
-                            </div>
-                            <div className="flex gap-1.5">
-                                {entry.guess.map((digit, j) => {
-                                    const c = RESULT_COLORS[entry.result[j]] || RESULT_COLORS.red
-                                    return (
-                                        <div key={j} className={`w-8 h-8 rounded-lg border-2 flex items-center justify-center bungee-font text-sm shadow-sm ${c.bg} ${c.border} ${c.text}`}>
-                                            {digit}
-                                        </div>
-                                    )
-                                })}
+
+                {/* SECRET CODE REVEALER — only visible to the player themselves */}
+                {isMe && player.digits && (
+                    <div className="mb-4 bg-amber-50 rounded-2xl p-4 border-2 border-amber-200 flex flex-col items-center gap-3">
+                        <span className="text-amber-700 bungee-font text-xs tracking-widest">YOUR SECRET CODE</span>
+                        <div className="flex items-center gap-3">
+                            <button
+                                onPointerDown={() => setShowMyCode(true)}
+                                onPointerUp={() => setShowMyCode(false)}
+                                onPointerLeave={() => setShowMyCode(false)}
+                                className="w-12 h-12 rounded-full bg-amber-200 hover:bg-amber-300 flex items-center justify-center text-xl transition-all active:scale-95 shadow-sm border-2 border-amber-400"
+                                title="Hold to reveal"
+                            >
+                                {showMyCode ? '🔓' : '🔒'}
+                            </button>
+                            <div className="flex gap-2">
+                                {[0,1,2,3].map(i => (
+                                    <div key={i} className="w-10 h-10 rounded-xl border-2 border-amber-500 bg-amber-400 flex items-center justify-center bungee-font text-white shadow-md text-lg">
+                                        {showMyCode ? player.digits[i] : '?'}
+                                    </div>
+                                ))}
                             </div>
                         </div>
-                    ))}
+                    </div>
+                )}
+
+                <div className="flex flex-col overflow-y-auto pr-1 gap-2">
+                    {guessers.length === 0 && (
+                        <p className="text-gray-400 bungee-font text-center py-6 text-sm">Nobody has guessed {isMe ? 'your' : player.name + "'s"} code yet.</p>
+                    )}
+
+                    {guessers.map(guesserName => {
+                        const isExpanded = expandedGuesser === guesserName;
+                        const entries = grouped[guesserName];
+                        return (
+                            <div key={guesserName} className="flex flex-col bg-gray-50 border-2 border-gray-100 rounded-xl overflow-hidden">
+                                {/* Accordion Header */}
+                                <button
+                                    onClick={() => setExpandedGuesser(isExpanded ? null : guesserName)}
+                                    className="flex justify-between items-center p-3 w-full hover:bg-gray-100 transition-colors"
+                                >
+                                    <span className="text-green-800 bungee-font text-sm">BY {guesserName}</span>
+                                    <span className="text-gray-400 text-xs font-bold">{isExpanded ? '▲' : '▼'} {entries.length}</span>
+                                </button>
+
+                                {/* Accordion Content */}
+                                {isExpanded && (
+                                    <div className="flex flex-col gap-2 p-3 pt-0 border-t-2 border-gray-100 bg-white">
+                                        {entries.map((entry, i) => (
+                                            <div key={i} className="flex flex-col gap-1.5 mt-2 bg-gray-50 p-2 rounded-lg">
+                                                <span className="text-gray-400 text-[10px] bungee-font tracking-wider">ROUND {entry.round}</span>
+                                                <div className="flex gap-1.5">
+                                                    {entry.guess.map((digit, j) => {
+                                                        const c = RESULT_COLORS[entry.result[j]] || RESULT_COLORS.red
+                                                        return (
+                                                            <div key={j} className={`w-8 h-8 rounded-lg border-2 flex items-center justify-center bungee-font text-sm shadow-sm ${c.bg} ${c.border} ${c.text}`}>
+                                                                {digit}
+                                                            </div>
+                                                        )
+                                                    })}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )
+                    })}
                 </div>
             </div>
         </div>
@@ -47,56 +110,63 @@ const HistoryModal = ({ player, history, onClose }) => {
 }
 
 // ── PlayerCard ───────────────────────────────────────────────────
-const PlayerCard = ({ player, isTarget, isEliminated, isMe, guessHistory = [], onOpenHistory }) => {
-    const latestGuess = guessHistory.length > 0 ? guessHistory[guessHistory.length - 1] : null
+const PlayerCard = ({ player, isTarget, isEliminated, isMe, receivedGuesses = [], onOpenHistory }) => {
+    const latestReceived = receivedGuesses.length > 0 ? receivedGuesses[receivedGuesses.length - 1] : null
+    const isOffline = player.disconnected
 
     return (
         <div className={`
             relative flex flex-col rounded-2xl border-4 overflow-hidden transition-all duration-500
-            w-40 md:w-52 flex-shrink-0 h-[100px] md:h-auto
-            ${isEliminated
-                ? 'bg-gray-200/60 border-gray-300 opacity-60'
-                : isTarget
-                    ? 'bg-white border-green-400 shadow-[0_0_20px_5px_rgba(74,222,128,0.6)] md:scale-[1.02]'
-                    : 'bg-white/80 border-white/30'
+            w-48 md:w-64 flex-shrink-0 min-h-[120px] md:min-h-[130px] shadow-[0_4px_15px_rgba(0,0,0,0.1)]
+            ${isOffline
+                ? 'bg-gray-100/60 border-gray-200 opacity-50'
+                : isEliminated
+                    ? 'bg-gray-200/60 border-gray-300 opacity-60'
+                    : isTarget
+                        ? 'bg-white border-green-400 shadow-[0_0_20px_5px_rgba(74,222,128,0.6)] z-10 scale-[1.02] md:scale-[1.04]'
+                        : 'bg-white/95 border-white shadow-xl'
             }
         `}>
+            {/* Offline badge */}
+            {isOffline && (
+                <div className="absolute top-1 right-1 z-10 bg-red-500 text-white text-[9px] bungee-font px-1.5 py-0.5 rounded-full">OFFLINE</div>
+            )}
             {/* Header */}
-            <div className={`px-2 py-1.5 flex items-center gap-1.5 ${isEliminated ? 'bg-gray-300/60' : isTarget ? 'bg-green-400' : 'bg-green-500/80'}`}>
-                {/* History Button (Top Left exactly as requested) */}
-                <button 
-                    onClick={() => onOpenHistory(player.id)} 
-                    className={`w-6 h-6 rounded-full flex items-center justify-center text-xs transition-all active:scale-90 flex-shrink-0 ${isTarget ? 'bg-green-500 hover:bg-green-600 text-white' : 'bg-white/20 hover:bg-white/40 text-white'}`}
-                    title="View History"
-                >
-                    📜
-                </button>
-
-                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-white bungee-font text-[10px] flex-shrink-0 ${isEliminated ? 'bg-gray-400' : 'bg-green-700'}`}>
+            <div className={`px-2 py-2 flex items-center gap-2 ${isOffline ? 'bg-gray-400/50' : isEliminated ? 'bg-gray-300/60' : isTarget ? 'bg-green-400' : 'bg-green-500'}`}>
+                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-white bungee-font text-[12px] flex-shrink-0 shadow-sm ${isOffline ? 'bg-gray-500' : isEliminated ? 'bg-gray-400' : 'bg-green-700'}`}>
                     {player.name?.[0]?.toUpperCase()}
                 </div>
                 <div className="flex-1 min-w-0">
-                    <p className={`bungee-font text-xs truncate ${isEliminated ? 'text-gray-500 line-through' : 'text-white'}`}>
+                    <p className={`bungee-font text-sm truncate tracking-wide ${isEliminated || isOffline ? 'text-gray-500 line-through' : 'text-white'}`}>
                         {player.name}
-                        {isMe && <span className="opacity-70 text-[10px] ml-1">(you)</span>}
+                        {isMe && <span className="opacity-80 text-[10px] ml-1">(you)</span>}
                     </p>
                 </div>
+                <button
+                    onClick={() => onOpenHistory(player.id)}
+                    className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 transition-all active:scale-90 text-base ${isEliminated || isOffline ? 'opacity-40 cursor-default' : 'hover:bg-white/20 cursor-pointer'}`}
+                    title="View History"
+                >
+                    📋
+                </button>
             </div>
 
-            {/* Recent Guess Only */}
+            {/* Body */}
             <div className="flex-1 flex flex-col items-center justify-center px-1">
-                {isEliminated ? (
-                    <span className="text-gray-400 bungee-font text-lg">ELIMINATED</span>
+                {isOffline ? (
+                    <span className="text-gray-400 bungee-font text-xs pb-1 tracking-widest">DISCONNECTED</span>
+                ) : isEliminated ? (
+                    <span className="text-gray-400 bungee-font text-xl pb-1">ELIMINATED</span>
                 ) : isTarget ? (
-                    <span className="text-green-500 bungee-font animate-pulse">TARGET</span>
-                ) : latestGuess ? (
-                    <div className="flex flex-col items-center">
-                        <p className="text-gray-400 text-[9px] bungee-font tracking-widest mb-1">LATEST vs {latestGuess.targetName}</p>
-                        <div className="flex gap-1">
-                            {latestGuess.guess.map((digit, j) => {
-                                const c = RESULT_COLORS[latestGuess.result[j]] || RESULT_COLORS.red
+                    <span className="text-green-500 bungee-font text-lg animate-pulse pb-1">TARGET</span>
+                ) : latestReceived ? (
+                    <div className="flex flex-col items-center pt-1">
+                        <p className="text-gray-400 text-[10px] bungee-font tracking-widest mb-1.5 truncate max-w-[160px]">BY {latestReceived.guesserName}</p>
+                        <div className="flex gap-1.5 pb-2">
+                            {latestReceived.guess.map((digit, j) => {
+                                const c = RESULT_COLORS[latestReceived.result[j]] || RESULT_COLORS.red
                                 return (
-                                    <div key={j} className={`w-6 h-6 rounded-md border-2 flex items-center justify-center bungee-font text-xs ${c.bg} ${c.border} ${c.text}`}>
+                                    <div key={j} className={`w-7 h-7 md:w-8 md:h-8 rounded-lg border-2 flex items-center justify-center bungee-font text-sm shadow-sm ${c.bg} ${c.border} ${c.text}`}>
                                         {digit}
                                     </div>
                                 )
@@ -104,7 +174,7 @@ const PlayerCard = ({ player, isTarget, isEliminated, isMe, guessHistory = [], o
                         </div>
                     </div>
                 ) : (
-                    <p className="text-gray-400/60 bungee-font text-[10px]">NO GUESSES YET</p>
+                    <p className="text-gray-400/70 bungee-font text-xs pb-1 tracking-widest">NO GUESSES YET</p>
                 )}
             </div>
         </div>
@@ -147,17 +217,18 @@ const GameScreen = ({ userName, gameData, onExit }) => {
     const socketRef = useRef(gameData?.socket)
     const myId = socketRef.current?.id
 
-    const allPlayers = gameData?.players || []
+    const isSpectator = gameData?.spectator || false
     const isHost = gameData?.isHost || false
 
     // ── Game state ───────────────────────────────────────────────
+    const [allPlayers, setAllPlayers] = useState(gameData?.players || [])
     const [isRevealing, setIsRevealing] = useState(true)
     const [phase, setPhase] = useState('waiting') // 'waiting' | 'guessing' | 'results' | 'gameover'
     const [currentTargetId, setCurrentTargetId] = useState(null)
     const [currentTargetName, setCurrentTargetName] = useState('')
     const [roundNumber, setRoundNumber] = useState(0)
     const [expiresAt, setExpiresAt] = useState(null)
-    const [activePlayers, setActivePlayers] = useState(allPlayers.map(p => p.id))
+    const [activePlayers, setActivePlayers] = useState((gameData?.players || []).map(p => p.id))
     const [guessHistory, setGuessHistory] = useState({})  // { playerId: [{guess, result, targetName, round}] }
     const [roundResults, setRoundResults] = useState(null)
     const [winner, setWinner] = useState(null)
@@ -218,11 +289,30 @@ const GameScreen = ({ userName, gameData, onExit }) => {
             setPhase('gameover')
         })
 
+        // Player joined / disconnected / reconnected — update the player roster
+        socket.on('player-status-changed', ({ players }) => {
+            setAllPlayers(players)
+        })
+
+        // Full state sync — sent when this client reconnects mid-game
+        socket.on('game-state-sync', ({ players, phase: p, currentTargetId: tid, currentTargetName: tname, roundNumber: rn, guessHistory: gh, activePlayers: ap, submittedIds: si }) => {
+            setAllPlayers(players)
+            setCurrentTargetId(tid)
+            setCurrentTargetName(tname)
+            setRoundNumber(rn)
+            setGuessHistory(gh || {})
+            setActivePlayers(ap || [])
+            setSubmittedIds(si || [])
+            if (p === 'guessing') { setPhase('guessing'); setIsRevealing(false) }
+        })
+
         return () => {
             socket.off('round-started')
             socket.off('guess-made')
             socket.off('round-complete')
             socket.off('game-over')
+            socket.off('player-status-changed')
+            socket.off('game-state-sync')
         }
     }, [])
 
@@ -244,25 +334,38 @@ const GameScreen = ({ userName, gameData, onExit }) => {
     }, [currentGuess, submitted])
 
     // ── Layout helpers ───────────────────────────────────────────
-    // Split players: left half and right half
-    const leftPlayers = allPlayers.filter((_, i) => i % 2 === 0)
-    const rightPlayers = allPlayers.filter((_, i) => i % 2 !== 0)
+    const gamePlayers = allPlayers.filter(p => !p.spectator)
+    const spectators = allPlayers.filter(p => p.spectator)
+    const leftPlayers = gamePlayers.filter((_, i) => i % 2 === 0)
+    const rightPlayers = gamePlayers.filter((_, i) => i % 2 !== 0)
 
     const isEliminated = (id) => !activePlayers.includes(id)
     const amTarget = currentTargetId === myId
-    
+
+    // Build a reverse map: receivedGuesses[targetId] = [{guesserName, guess, result, round}]
+    const receivedGuesses = Object.entries(guessHistory).reduce((acc, [guesserSocketId, entries]) => {
+        const guesserPlayer = allPlayers.find(p => p.id === guesserSocketId)
+        const guesserName = guesserPlayer?.name || 'Unknown'
+        entries.forEach(entry => {
+            if (!acc[entry.targetId]) acc[entry.targetId] = []
+            acc[entry.targetId].push({ guesserName, guess: entry.guess, result: entry.result, round: entry.round })
+        })
+        return acc
+    }, {})
+
     const historyModalPlayer = historyPlayerId ? allPlayers.find(p => p.id === historyPlayerId) : null
 
     // ── Render ───────────────────────────────────────────────────
     return (
         <div className='bg-[#4CAF50] h-[100dvh] w-screen relative overflow-hidden flex flex-col'>
 
-            {/* History Modal */}
+            {/* History Modal — shows guesses others made ABOUT this player */}
             {historyModalPlayer && (
-                <HistoryModal 
-                    player={historyModalPlayer} 
-                    history={guessHistory[historyPlayerId] || []} 
-                    onClose={() => setHistoryPlayerId(null)} 
+                <HistoryModal
+                    player={historyModalPlayer}
+                    history={receivedGuesses[historyPlayerId] || []}
+                    onClose={() => setHistoryPlayerId(null)}
+                    isMe={historyPlayerId === myId}
                 />
             )}
 
@@ -324,10 +427,10 @@ const GameScreen = ({ userName, gameData, onExit }) => {
 
             {/* ══ MAIN GAME LAYOUT ══ */}
             {phase !== 'gameover' && (
-                <div className={`flex-1 flex flex-col md:flex-row gap-2 md:gap-4 p-2 md:p-6 overflow-hidden transition-all duration-700 delay-500 z-10 ${isRevealing ? 'opacity-0' : 'opacity-100'}`}>
+                <div className={`flex-1 flex flex-col xl:flex-row gap-4 xl:gap-8 p-3 md:p-6 md:pt-16 xl:px-10 overflow-hidden transition-all duration-700 delay-500 z-10 ${isRevealing ? 'opacity-0' : 'opacity-100'}`}>
 
                     {/* ── LEFT PLAYERS (Top on Mobile) ── */}
-                    <div className="flex flex-row md:flex-col gap-2 md:gap-3 w-full md:w-52 flex-shrink-0 overflow-x-auto md:overflow-y-auto no-scrollbar md:pb-0 hide-scroll">
+                    <div className="flex flex-row xl:flex-col gap-3 md:gap-4 w-full xl:w-[350px] flex-shrink-0 overflow-x-auto xl:overflow-y-auto no-scrollbar md:pb-0 hide-scroll items-center xl:items-end px-2 md:px-0 pt-2 md:pt-0">
                         {leftPlayers.map(p => (
                             <PlayerCard
                                 key={p.id}
@@ -335,24 +438,24 @@ const GameScreen = ({ userName, gameData, onExit }) => {
                                 isTarget={p.id === currentTargetId}
                                 isEliminated={isEliminated(p.id)}
                                 isMe={p.id === myId}
-                                guessHistory={guessHistory[p.id] || []}
+                                receivedGuesses={receivedGuesses[p.id] || []}
                                 onOpenHistory={setHistoryPlayerId}
                             />
                         ))}
                     </div>
 
                     {/* ── CENTER ── */}
-                    <div className="flex-1 flex flex-col items-center justify-center gap-2 md:gap-4 min-w-0 py-2 md:py-0 overflow-y-auto md:overflow-visible">
+                    <div className="flex-1 flex flex-col items-center justify-center gap-4 md:gap-6 min-w-0 py-2 md:py-0 overflow-y-auto md:overflow-visible">
 
                         {/* Round info + Timer */}
                         {phase === 'guessing' && (
-                            <div className="w-full max-w-sm px-4">
-                                <div className="text-center mb-2">
-                                    <p className="text-white/60 bungee-font text-[10px] md:text-xs tracking-widest">ROUND {roundNumber}</p>
-                                    <p className="text-white bungee-font text-xl md:text-2xl drop-shadow">
+                            <div className="w-full max-w-md px-4">
+                                <div className="text-center mb-3">
+                                    <p className="text-white/60 bungee-font text-xs tracking-widest">ROUND {roundNumber}</p>
+                                    <p className="text-white bungee-font text-2xl md:text-3xl drop-shadow">
                                         GUESSING <span className="text-yellow-300">{currentTargetName}</span>'S CODE
                                     </p>
-                                    <p className="text-white/50 bungee-font text-xs mt-0.5">
+                                    <p className="text-white/50 bungee-font text-xs mt-1">
                                         {submittedIds.length}/{totalGuessers} submitted
                                     </p>
                                 </div>
@@ -396,8 +499,16 @@ const GameScreen = ({ userName, gameData, onExit }) => {
                             </div>
                         )}
 
+                        {/* ── Spectator banner ── */}
+                        {isSpectator && phase === 'guessing' && (
+                            <div className="bg-white/20 backdrop-blur-md rounded-3xl p-4 text-center border-2 border-white/30 mx-4">
+                                <p className="text-white bungee-font text-sm">👁 SPECTATING</p>
+                                <p className="text-white/60 bungee-font text-xs mt-1">You joined mid-game</p>
+                            </div>
+                        )}
+
                         {/* ── Guess Input ── */}
-                        {phase === 'guessing' && (
+                        {!isSpectator && phase === 'guessing' && (
                             amTarget ? (
                                 /* You're being guessed */
                                 <div className="bg-white/20 backdrop-blur-md rounded-3xl p-6 md:p-8 text-center border-4 border-yellow-300 shadow-[0_0_30px_rgba(250,204,21,0.4)] mx-4">
@@ -417,11 +528,11 @@ const GameScreen = ({ userName, gameData, onExit }) => {
                                 </div>
                             ) : (
                                 /* Input */
-                                <div className="bg-white/95 backdrop-blur-sm rounded-3xl p-4 md:p-5 shadow-2xl w-full max-w-xs flex flex-col gap-3 md:gap-4 mx-4">
+                                <div className="bg-white/95 backdrop-blur-sm rounded-3xl p-5 md:p-6 shadow-2xl w-full max-w-sm flex flex-col gap-4 mx-4">
                                     {/* Digit slots */}
-                                    <div className="flex gap-1.5 md:gap-2 justify-center">
+                                    <div className="flex gap-2 justify-center">
                                         {[0,1,2,3].map(i => (
-                                            <div key={i} className={`w-12 h-14 md:w-14 md:h-16 rounded-2xl border-4 flex items-center justify-center bungee-font text-2xl md:text-3xl transition-all ${
+                                            <div key={i} className={`w-14 h-16 md:w-16 md:h-18 rounded-2xl border-4 flex items-center justify-center bungee-font text-3xl transition-all shadow-inner ${
                                                 currentGuess[i] !== undefined
                                                     ? 'bg-green-50 border-green-400 text-green-800'
                                                     : 'bg-gray-50 border-gray-200 text-gray-300'
@@ -458,8 +569,18 @@ const GameScreen = ({ userName, gameData, onExit }) => {
                         )}
                     </div>
 
+                    {/* ── Spectators strip ── */}
+                    {spectators.length > 0 && (
+                        <div className="hidden xl:flex absolute bottom-3 left-1/2 -translate-x-1/2 items-center gap-2 bg-black/20 backdrop-blur-sm rounded-full px-4 py-1.5 z-10">
+                            <span className="text-white/60 bungee-font text-[10px] tracking-widest">👁 WATCHING:</span>
+                            {spectators.map(s => (
+                                <span key={s.id} className="text-white/80 bungee-font text-[10px] bg-white/10 px-2 py-0.5 rounded-full">{s.name}</span>
+                            ))}
+                        </div>
+                    )}
+
                     {/* ── RIGHT PLAYERS (Bottom on Mobile) ── */}
-                    <div className="flex flex-row md:flex-col gap-2 md:gap-3 w-full md:w-52 flex-shrink-0 overflow-x-auto md:overflow-y-auto no-scrollbar md:pt-0 hide-scroll">
+                    <div className="flex flex-row xl:flex-col gap-3 md:gap-4 w-full xl:w-[350px] flex-shrink-0 overflow-x-auto xl:overflow-y-auto no-scrollbar xl:pt-0 hide-scroll items-center xl:items-start px-2 md:px-0 pb-2 md:pb-0">
                         {rightPlayers.map(p => (
                             <PlayerCard
                                 key={p.id}
@@ -467,7 +588,7 @@ const GameScreen = ({ userName, gameData, onExit }) => {
                                 isTarget={p.id === currentTargetId}
                                 isEliminated={isEliminated(p.id)}
                                 isMe={p.id === myId}
-                                guessHistory={guessHistory[p.id] || []}
+                                receivedGuesses={receivedGuesses[p.id] || []}
                                 onOpenHistory={setHistoryPlayerId}
                             />
                         ))}
