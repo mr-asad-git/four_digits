@@ -51,9 +51,9 @@ const HistoryModal = ({ player, history, onClose, isMe }) => {
                                 {showMyCode ? '🔓' : '🔒'}
                             </button>
                             <div className="flex gap-2">
-                                {[0,1,2,3].map(i => (
-                                    <div key={i} className="w-10 h-10 rounded-xl border-2 border-amber-500 bg-amber-400 flex items-center justify-center bungee-font text-white shadow-md text-lg">
-                                        {showMyCode ? player.digits[i] : '?'}
+                                {player.digits.map((d, i) => (
+                                    <div key={`code-${i}`} className="w-10 h-10 rounded-xl border-2 border-amber-500 bg-amber-400 flex items-center justify-center bungee-font text-white shadow-md text-lg">
+                                        {showMyCode ? d : '?'}
                                     </div>
                                 ))}
                             </div>
@@ -84,13 +84,13 @@ const HistoryModal = ({ player, history, onClose, isMe }) => {
                                 {isExpanded && (
                                     <div className="flex flex-col gap-2 p-3 pt-0 border-t-2 border-gray-100 bg-white">
                                         {entries.map((entry, i) => (
-                                            <div key={i} className="flex flex-col gap-1.5 mt-2 bg-gray-50 p-2 rounded-lg">
+                                            <div key={`entry-${i}`} className="flex flex-col gap-1.5 mt-2 bg-gray-50 p-2 rounded-lg">
                                                 <span className="text-gray-400 text-[10px] bungee-font tracking-wider">ROUND {entry.round}</span>
                                                 <div className="flex gap-1.5">
                                                     {entry.guess.map((digit, j) => {
                                                         const c = RESULT_COLORS[entry.result[j]] || RESULT_COLORS.red
                                                         return (
-                                                            <div key={j} className={`w-8 h-8 rounded-lg border-2 flex items-center justify-center bungee-font text-sm shadow-sm ${c.bg} ${c.border} ${c.text}`}>
+                                                            <div key={`eguess-${i}-${j}`} className={`w-8 h-8 rounded-lg border-2 flex items-center justify-center bungee-font text-sm shadow-sm ${c.bg} ${c.border} ${c.text}`}>
                                                                 {digit}
                                                             </div>
                                                         )
@@ -166,7 +166,7 @@ const PlayerCard = ({ player, isTarget, isEliminated, isMe, receivedGuesses = []
                             {latestReceived.guess.map((digit, j) => {
                                 const c = RESULT_COLORS[latestReceived.result[j]] || RESULT_COLORS.red
                                 return (
-                                    <div key={j} className={`w-7 h-7 md:w-8 md:h-8 rounded-lg border-2 flex items-center justify-center bungee-font text-sm shadow-sm ${c.bg} ${c.border} ${c.text}`}>
+                                    <div key={`pguess-${j}`} className={`w-7 h-7 md:w-8 md:h-8 rounded-lg border-2 flex items-center justify-center bungee-font text-sm shadow-sm ${c.bg} ${c.border} ${c.text}`}>
                                         {digit}
                                     </div>
                                 )
@@ -219,6 +219,7 @@ const GameScreen = ({ userName, gameData, onExit }) => {
 
     const isSpectator = gameData?.spectator || false
     const isHost = gameData?.isHost || false
+    const [digitCount, setDigitCount] = useState(gameData?.digitCount || 4)
 
     // ── Game state ───────────────────────────────────────────────
     const [allPlayers, setAllPlayers] = useState(gameData?.players || [])
@@ -252,7 +253,7 @@ const GameScreen = ({ userName, gameData, onExit }) => {
         const socket = socketRef.current
         if (!socket) return
 
-        socket.on('round-started', ({ targetId, targetName, roundNumber, expiresAt, activePlayers }) => {
+        socket.on('round-started', ({ targetId, targetName, roundNumber, expiresAt, activePlayers, digitCount: dc }) => {
             setCurrentTargetId(targetId)
             setCurrentTargetName(targetName)
             setRoundNumber(roundNumber)
@@ -263,6 +264,7 @@ const GameScreen = ({ userName, gameData, onExit }) => {
             setCurrentGuess([])
             setSubmittedIds([])
             setRoundResults(null)
+            if (dc) setDigitCount(dc)
             setTotalGuessers(activePlayers.filter(id => id !== targetId).length)
         })
 
@@ -295,7 +297,7 @@ const GameScreen = ({ userName, gameData, onExit }) => {
         })
 
         // Full state sync — sent when this client reconnects mid-game
-        socket.on('game-state-sync', ({ players, phase: p, currentTargetId: tid, currentTargetName: tname, roundNumber: rn, guessHistory: gh, activePlayers: ap, submittedIds: si }) => {
+        socket.on('game-state-sync', ({ players, phase: p, currentTargetId: tid, currentTargetName: tname, roundNumber: rn, guessHistory: gh, activePlayers: ap, submittedIds: si, digitCount: dc }) => {
             setAllPlayers(players)
             setCurrentTargetId(tid)
             setCurrentTargetName(tname)
@@ -303,6 +305,7 @@ const GameScreen = ({ userName, gameData, onExit }) => {
             setGuessHistory(gh || {})
             setActivePlayers(ap || [])
             setSubmittedIds(si || [])
+            if (dc) setDigitCount(dc)
             if (p === 'guessing') { setPhase('guessing'); setIsRevealing(false) }
         })
 
@@ -318,9 +321,9 @@ const GameScreen = ({ userName, gameData, onExit }) => {
 
     // ── Guess input handlers ─────────────────────────────────────
     const addDigit = useCallback((n) => {
-        if (currentGuess.length >= 4 || submitted) return
+        if (currentGuess.length >= digitCount || submitted) return
         setCurrentGuess(prev => [...prev, n])
-    }, [currentGuess, submitted])
+    }, [currentGuess, submitted, digitCount])
 
     const removeDigit = useCallback(() => {
         if (submitted) return
@@ -328,10 +331,10 @@ const GameScreen = ({ userName, gameData, onExit }) => {
     }, [submitted])
 
     const submitGuess = useCallback(() => {
-        if (currentGuess.length !== 4 || submitted) return
+        if (currentGuess.length !== digitCount || submitted) return
         socketRef.current?.emit('submit-guess', { guess: currentGuess })
         setSubmitted(true)
-    }, [currentGuess, submitted])
+    }, [currentGuess, submitted, digitCount])
 
     // ── Layout helpers ───────────────────────────────────────────
     const gamePlayers = allPlayers.filter(p => !p.spectator)
@@ -373,7 +376,7 @@ const GameScreen = ({ userName, gameData, onExit }) => {
             {isRevealing && (
                 <div className="cloud-transition-overlay">
                     {CLOUD_WIDTHS.map((w, i) => (
-                        <div key={i} className="transition-cloud animate-rise"
+                        <div key={`cloud-${i}`} className="transition-cloud animate-rise"
                             style={{
                                 left: `${(i % 4) * 28 - 10}%`,
                                 bottom: `-${Math.floor(i / 4) * 28 + 10}vh`,
@@ -403,11 +406,20 @@ const GameScreen = ({ userName, gameData, onExit }) => {
             <div className="absolute top-20 left-0 animate-float opacity-15 pointer-events-none"><Cloud width={200} height={100} /></div>
             <div className="absolute bottom-10 right-0 animate-float opacity-15 pointer-events-none" style={{ animationDelay: '3s' }}><Cloud width={250} height={120} /></div>
 
+            {/* Room code badge — top-left */}
+            {gameData?.roomCode && (
+                <div className={`absolute top-4 left-4 z-10 flex items-center gap-1.5 bg-black/20 backdrop-blur-sm rounded-full px-3 py-1.5 transition-all ${isRevealing ? 'opacity-0' : 'opacity-100'}`}>
+                    <span className="text-white/60 bungee-font text-[9px] tracking-widest">ROOM</span>
+                    <span className="text-white bungee-font text-sm tracking-widest">{gameData.roomCode}</span>
+                </div>
+            )}
+
             {/* Exit button */}
             <button onClick={() => setExitConfirm(true)}
                 className={`absolute top-4 right-4 w-10 h-10 rounded-full bg-white/20 hover:bg-red-400/80 border-2 border-white/30 text-white bungee-font text-sm transition-all z-10 ${isRevealing ? 'opacity-0' : 'opacity-100'}`}>
                 ✕
             </button>
+
 
             {/* ══ GAME OVER SCREEN ══ */}
             {phase === 'gameover' && winner && (
@@ -482,12 +494,12 @@ const GameScreen = ({ userName, gameData, onExit }) => {
                                 )}
                                 <div className="flex flex-col gap-2 max-h-48 overflow-y-auto pr-1">
                                     {roundResults.results.map((r, i) => (
-                                        <div key={i} className="flex items-center gap-2 justify-between pl-1">
+                                        <div key={r.guesserSocketId || `row-${i}`} className="flex items-center gap-2 justify-between pl-1">
                                             <span className="text-green-800 bungee-font text-xs md:text-sm truncate max-w-[80px]">{r.guesserName}</span>
                                             <div className="flex gap-1">
                                                 {r.guess.map((d, j) => {
                                                     const c = RESULT_COLORS[r.result[j]]
-                                                    return <div key={j} className={`w-6 h-6 md:w-7 md:h-7 rounded-md md:rounded-lg border-2 flex items-center justify-center bungee-font text-xs md:text-sm ${c.bg} ${c.border} ${c.text}`}>{d}</div>
+                                                    return <div key={`rcell-${i}-${j}`} className={`w-6 h-6 md:w-7 md:h-7 rounded-md md:rounded-lg border-2 flex items-center justify-center bungee-font text-xs md:text-sm ${c.bg} ${c.border} ${c.text}`}>{d}</div>
                                                 })}
                                             </div>
                                             {r.correct ? <span className="text-green-500 text-sm">✅</span> : <span className="w-4"></span>}
@@ -519,48 +531,50 @@ const GameScreen = ({ userName, gameData, onExit }) => {
                                 /* Submitted, waiting */
                                 <div className="bg-white/95 rounded-3xl p-5 md:p-6 text-center shadow-2xl w-full max-w-sm mx-4">
                                     <p className="text-green-600 bungee-font text-lg md:text-xl mb-3">✅ GUESS SUBMITTED!</p>
-                                    <div className="flex gap-2 justify-center">
+                                    <div className={`flex gap-1.5 justify-center ${currentGuess.length >= 7 ? 'gap-1' : ''}`}>
                                         {currentGuess.map((d, i) => (
-                                            <div key={i} className="w-10 h-12 md:w-12 md:h-14 bg-green-100 rounded-2xl border-2 border-green-300 flex items-center justify-center text-green-800 bungee-font text-xl md:text-2xl">{d}</div>
+                                            <div key={`sub-${i}`} className={`${digitCount <= 5 ? 'w-10 h-12' : digitCount === 6 ? 'w-8 h-10' : 'w-7 h-9'} bg-green-100 rounded-xl border-2 border-green-300 flex items-center justify-center text-green-800 bungee-font text-xl`}>{d}</div>
                                         ))}
                                     </div>
                                     <p className="text-green-400 bungee-font text-[10px] md:text-xs mt-4">Waiting for others...</p>
                                 </div>
                             ) : (
                                 /* Input */
-                                <div className="bg-white/95 backdrop-blur-sm rounded-3xl p-5 md:p-6 shadow-2xl w-full max-w-sm flex flex-col gap-4 mx-4">
-                                    {/* Digit slots */}
-                                    <div className="flex gap-2 justify-center">
-                                        {[0,1,2,3].map(i => (
-                                            <div key={i} className={`w-14 h-16 md:w-16 md:h-18 rounded-2xl border-4 flex items-center justify-center bungee-font text-3xl transition-all shadow-inner ${
-                                                currentGuess[i] !== undefined
+                                <div className="bg-white/95 backdrop-blur-sm rounded-3xl p-4 md:p-5 shadow-2xl w-full max-w-sm flex flex-col gap-3 mx-4">
+                                    {/* Digit slots — responsive: shrink for 6+ digits */}
+                                    <div className={`flex gap-1.5 justify-center ${digitCount >= 7 ? 'gap-1' : 'gap-2'}`}>
+                                        {Array.from({ length: digitCount }).map((_, i) => (
+                                            <div key={`digit-${i}`} className={`
+                                                rounded-xl border-4 flex items-center justify-center bungee-font transition-all shadow-inner
+                                                ${digitCount <= 5 ? 'w-14 h-16 md:w-16 text-3xl' : digitCount === 6 ? 'w-11 h-14 md:w-12 text-2xl' : 'w-9 h-12 md:w-11 text-xl'}
+                                                ${currentGuess[i] !== undefined
                                                     ? 'bg-green-50 border-green-400 text-green-800'
                                                     : 'bg-gray-50 border-gray-200 text-gray-300'
-                                            }`}>
+                                                }`}>
                                                 {currentGuess[i] ?? '?'}
                                             </div>
                                         ))}
                                     </div>
 
                                     {/* Numpad */}
-                                    <div className="grid grid-cols-5 gap-1 md:gap-1.5 px-2">
+                                    <div className="grid grid-cols-5 gap-1 md:gap-1.5 px-1">
                                         {[1,2,3,4,5,6,7,8,9,0].map(n => (
                                             <button key={n} onClick={() => addDigit(n)}
-                                                disabled={currentGuess.length >= 4}
-                                                className="aspect-[4/3] md:aspect-square rounded-xl bg-green-400 hover:bg-green-500 active:bg-green-600 text-white bungee-font text-lg md:text-xl transition-all active:scale-90 shadow-[0_3px_0_0_#2e7d32] active:shadow-none active:translate-y-0.5 disabled:opacity-40">
+                                                disabled={currentGuess.length >= digitCount}
+                                                className="aspect-square rounded-xl bg-green-400 hover:bg-green-500 active:bg-green-600 text-white bungee-font text-lg md:text-xl transition-all active:scale-90 shadow-[0_3px_0_0_#2e7d32] active:shadow-none active:translate-y-0.5 disabled:opacity-40">
                                                 {n}
                                             </button>
                                         ))}
                                     </div>
 
                                     {/* Backspace + Submit */}
-                                    <div className="flex gap-2 px-2 pb-1">
+                                    <div className="flex gap-2 px-1">
                                         <button onClick={removeDigit} disabled={currentGuess.length === 0}
-                                            className="w-1/3 py-2.5 md:py-3 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-600 bungee-font text-xs md:text-sm transition-all disabled:opacity-40">
+                                            className="w-1/3 py-4 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-600 bungee-font text-xl md:text-2xl transition-all disabled:opacity-40">
                                             ⌫
                                         </button>
-                                        <button onClick={submitGuess} disabled={currentGuess.length !== 4}
-                                            className="flex-1 py-2.5 md:py-3 rounded-xl bg-[#FFC107] hover:bg-[#FFB300] text-[#5D4037] bungee-font text-xs md:text-sm shadow-[0_3px_0_0_#FFA000] active:shadow-none active:translate-y-0.5 transition-all disabled:opacity-50">
+                                        <button onClick={submitGuess} disabled={currentGuess.length !== digitCount}
+                                            className="flex-1 py-4 rounded-xl bg-[#FFC107] hover:bg-[#FFB300] text-[#5D4037] bungee-font text-sm md:text-base shadow-[0_3px_0_0_#FFA000] active:shadow-none active:translate-y-0.5 transition-all disabled:opacity-50">
                                             ✅ SUBMIT
                                         </button>
                                     </div>

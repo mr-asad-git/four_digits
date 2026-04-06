@@ -35,19 +35,21 @@ function generateRoomCode() {
 }
 
 // ── Guess validation ──────────────────────────────────────────────
+// Works for any digit count (4–8)
 function checkGuess(secret, guess) {
-    const result = ['red', 'red', 'red', 'red'];
+    const len = secret.length;
+    const result = Array(len).fill('red');
     const secretCopy = [...secret];
     const guessCopy = [...guess];
 
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < len; i++) {
         if (guessCopy[i] === secretCopy[i]) {
             result[i] = 'green';
             secretCopy[i] = null;
             guessCopy[i] = null;
         }
     }
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < len; i++) {
         if (guessCopy[i] !== null) {
             const idx = secretCopy.indexOf(guessCopy[i]);
             if (idx !== -1) {
@@ -62,7 +64,6 @@ function checkGuess(secret, guess) {
 // ── Game state helpers ────────────────────────────────────────────
 function initGameState(players) {
     const history = {};
-    // Only original players (not spectators) get history slots
     players.forEach(p => { if (!p.spectator) history[p.id] = []; });
     return {
         targetQueue: players.filter(p => !p.spectator).map(p => p.id),
@@ -87,7 +88,6 @@ function getActiveGuessers(room) {
     );
 }
 
-// ── Broadcast helper — sends current player list to whole room ────
 function broadcastPlayerStatus(roomCode) {
     const room = rooms[roomCode];
     if (!room) return;
@@ -99,7 +99,6 @@ function startRound(roomCode) {
     if (!room || !room.gameState) return;
     const gs = room.gameState;
 
-    // Pick next non-eliminated, non-disconnected target
     let targetId = null;
     while (gs.targetQueue.length > 0) {
         const candidate = gs.targetQueue.shift();
@@ -110,7 +109,6 @@ function startRound(roomCode) {
         }
     }
 
-    // Refill queue from active (connected or not — they may reconnect) non-eliminated non-spectator players
     if (!targetId) {
         const active = room.players.filter(p => !gs.eliminatedIds.includes(p.id) && !p.spectator);
         if (active.length <= 1) {
@@ -145,9 +143,10 @@ function startRound(roomCode) {
         activePlayers: room.players
             .filter(p => !gs.eliminatedIds.includes(p.id) && !p.spectator)
             .map(p => p.id),
+        digitCount: room.digitCount || 4,
     });
 
-    console.log(`[Game] Round ${gs.roundNumber} started. Target: ${target?.name} in room ${roomCode}`);
+    console.log(`[Game] Round ${gs.roundNumber} started. Target: ${target?.name} in room ${roomCode} (${room.digitCount || 4} digits)`);
 }
 
 function completeRound(roomCode) {
@@ -159,7 +158,6 @@ function completeRound(roomCode) {
 
     const target = room.players.find(p => p.id === gs.currentTargetId);
     if (!target) {
-        // Target vanished entirely — just advance
         setTimeout(() => startRound(roomCode), 5000);
         return;
     }
@@ -235,6 +233,8 @@ io.on('connection', (socket) => {
                 maxPlayers: MAX_PLAYERS,
                 hostName: room.players[0]?.name || 'Unknown',
                 isFull: room.players.filter(p => !p.disconnected).length >= MAX_PLAYERS,
+                digitCount: room.digitCount || 4,
+                hasPassword: !!room.password,
             }));
         callback({ rooms: openRooms });
     });
@@ -245,6 +245,8 @@ io.on('connection', (socket) => {
             host: socket.id,
             players: [{ id: socket.id, name: playerName, ready: false, digits: null, disconnected: false, spectator: false }],
             started: false,
+            digitCount: 4,
+            password: null,
         };
         socket.join(roomCode);
         socket.data.roomCode = roomCode;
@@ -254,16 +256,42 @@ io.on('connection', (socket) => {
         callback({ success: true, roomCode, ip: localIP, port: PORT, players: rooms[roomCode].players });
     });
 
-    socket.on('join-room', ({ roomCode, playerName }, callback) => {
+    // ── Host sets room settings (digit count + password) ─────────
+    socket.on('set-room-settings', ({ digitCount, password }, callback) => {
+        const { roomCode } = socket.data;
+        const room = rooms[roomCode];
+        if (!room) return callback?.({ success: false, error: 'Room not found.' });
+        if (room.host !== socket.id) return callback?.({ success: false, error: 'Only the host can change settings.' });
+        if (room.started) return callback?.({ success: false, error: 'Game already started.' });
+        if (room.players.some(p => p.ready)) return callback?.({ success: false, error: 'Cannot change after players are ready.' });
+
+        const dc = parseInt(digitCount);
+        if (isNaN(dc) || dc < 4 || dc > 8) return callback?.({ success: false, error: 'Digit count must be 4–8.' });
+        if (password !== null && password !== undefined && !/^\d{4}$/.test(password)) {
+            return callback?.({ success: false, error: 'Password must be exactly 4 digits.' });
+        }
+
+        room.digitCount = dc;
+        room.password = password || null;
+
+        io.to(roomCode).emit('room-settings-updated', { digitCount: dc, hasPassword: !!room.password });
+        console.log(`[Room] ${roomCode} settings: ${dc} digits, password: ${room.password ? 'YES' : 'NO'}`);
+        callback?.({ success: true });
+    });
+
+    socket.on('join-room', ({ roomCode, playerName, password }, callback) => {
         const room = rooms[roomCode];
         if (!room) return callback({ success: false, error: 'Room not found.' });
 
-        // ── If game is running, join as spectator ─────────────────
+        // ── Password check ────────────────────────────────────────
+        if (room.password && password !== room.password) {
+            return callback({ success: false, error: room.password ? 'Incorrect password.' : 'No password needed.' });
+        }
+
+        // ── If game is running, join as spectator or rejoin ───────
         if (room.started) {
-            // Check if this player was originally in the game (by name) — if so, redirect to rejoin
             const existingSlot = room.players.find(p => p.name === playerName && p.disconnected);
             if (existingSlot) {
-                // Treat as a reconnect
                 const oldId = existingSlot.id;
                 existingSlot.id = socket.id;
                 existingSlot.disconnected = false;
@@ -273,12 +301,10 @@ io.on('connection', (socket) => {
                 socket.data.isHost = (room.host === oldId);
                 if (socket.data.isHost) room.host = socket.id;
 
-                // Update guessHistory key to new socket id if needed
                 if (room.gameState?.guessHistory[oldId]) {
                     room.gameState.guessHistory[socket.id] = room.gameState.guessHistory[oldId];
                     delete room.gameState.guessHistory[oldId];
                 }
-                // Update submittedIds
                 if (room.gameState) {
                     const si = room.gameState.submittedIds.indexOf(oldId);
                     if (si !== -1) room.gameState.submittedIds[si] = socket.id;
@@ -293,7 +319,6 @@ io.on('connection', (socket) => {
 
                 broadcastPlayerStatus(roomCode);
 
-                // Send full state sync to reconnected player
                 const gs = room.gameState;
                 socket.emit('game-state-sync', {
                     players: room.players,
@@ -305,13 +330,14 @@ io.on('connection', (socket) => {
                     activePlayers: room.players.filter(p => !gs?.eliminatedIds.includes(p.id) && !p.spectator).map(p => p.id),
                     eliminatedIds: gs?.eliminatedIds || [],
                     submittedIds: gs?.submittedIds || [],
+                    digitCount: room.digitCount || 4,
                 });
 
                 console.log(`[Room] ${playerName} RE-JOINED room ${roomCode}`);
-                return callback({ success: true, roomCode, players: room.players, isHost: socket.data.isHost, rejoined: true });
+                return callback({ success: true, roomCode, players: room.players, isHost: socket.data.isHost, rejoined: true, digitCount: room.digitCount || 4 });
             }
 
-            // New joiner — add as spectator
+            // New spectator
             room.players.push({ id: socket.id, name: playerName, ready: true, digits: null, disconnected: false, spectator: true });
             socket.join(roomCode);
             socket.data.roomCode = roomCode;
@@ -330,10 +356,11 @@ io.on('connection', (socket) => {
                 activePlayers: room.players.filter(p => !gs?.eliminatedIds.includes(p.id) && !p.spectator).map(p => p.id),
                 eliminatedIds: gs?.eliminatedIds || [],
                 submittedIds: gs?.submittedIds || [],
+                digitCount: room.digitCount || 4,
             });
 
             console.log(`[Room] ${playerName} joined room ${roomCode} as SPECTATOR`);
-            return callback({ success: true, roomCode, players: room.players, isHost: false, spectator: true });
+            return callback({ success: true, roomCode, players: room.players, isHost: false, spectator: true, digitCount: room.digitCount || 4 });
         }
 
         if (room.players.filter(p => !p.disconnected).length >= MAX_PLAYERS) {
@@ -347,7 +374,7 @@ io.on('connection', (socket) => {
         socket.data.isHost = false;
         io.to(roomCode).emit('player-joined', { players: room.players });
         console.log(`[Room] ${playerName} joined room ${roomCode}`);
-        callback({ success: true, roomCode, players: room.players, isHost: false });
+        callback({ success: true, roomCode, players: room.players, isHost: false, digitCount: room.digitCount || 4 });
     });
 
     socket.on('player-ready', ({ digits }) => {
@@ -379,8 +406,8 @@ io.on('connection', (socket) => {
         room.started = true;
         room.gameState = initGameState(room.players);
 
-        io.to(roomCode).emit('game-started', { players: room.players });
-        console.log(`[Game] Starting in room ${roomCode} with ${room.players.length} players`);
+        io.to(roomCode).emit('game-started', { players: room.players, digitCount: room.digitCount || 4 });
+        console.log(`[Game] Starting in room ${roomCode} with ${room.players.length} players, ${room.digitCount || 4} digits`);
 
         setTimeout(() => startRound(roomCode), 3500);
     });
@@ -391,15 +418,17 @@ io.on('connection', (socket) => {
         const room = rooms[roomCode];
         if (!room?.gameState) return;
         const gs = room.gameState;
+        const dc = room.digitCount || 4;
 
         const player = room.players.find(p => p.id === socket.id);
         if (!player || player.spectator) return;
         if (socket.id === gs.currentTargetId) return;
         if (gs.eliminatedIds.includes(socket.id)) return;
         if (gs.submittedIds.includes(socket.id)) return;
+        if (!Array.isArray(guess) || guess.length !== dc) return; // validate length
 
         const target = room.players.find(p => p.id === gs.currentTargetId);
-        if (!target?.digits) return;
+        if (!target?.digits || target.digits.length !== dc) return;
 
         const result = checkGuess(target.digits, guess);
         const correct = result.every(r => r === 'green');
@@ -433,7 +462,6 @@ io.on('connection', (socket) => {
         console.log(`[-] Disconnected: ${socket.data.playerName} (${socket.id}) from room ${roomCode}`);
 
         if (room.started) {
-            // Mark as disconnected — do NOT remove from roster
             const player = room.players.find(p => p.id === socket.id);
             if (player) player.disconnected = true;
 
@@ -441,21 +469,15 @@ io.on('connection', (socket) => {
 
             const gs = room.gameState;
             if (gs) {
-                // If the target just disconnected, auto-complete the round
                 if (socket.id === gs.currentTargetId) {
                     console.log(`[Game] Target ${socket.data.playerName} disconnected — completing round early.`);
                     if (gs.timer) { clearTimeout(gs.timer); gs.timer = null; }
                     completeRound(roomCode);
                     return;
                 }
-
-                // If they were an active guesser who hadn't submitted, check if all remaining submitted
                 if (!gs.eliminatedIds.includes(socket.id) && !player?.spectator) {
                     const guessers = getActiveGuessers(room);
-                    if (guessers.length > 0 && gs.submittedIds.length >= guessers.length) {
-                        completeRound(roomCode);
-                    } else if (guessers.length === 0) {
-                        // Nobody left to guess — complete the round
+                    if (guessers.length === 0 || gs.submittedIds.length >= guessers.length) {
                         completeRound(roomCode);
                     }
                 }
@@ -463,7 +485,6 @@ io.on('connection', (socket) => {
             return;
         }
 
-        // ── Pre-game lobby ────────────────────────────────────────
         room.players = room.players.filter(p => p.id !== socket.id);
         if (room.players.length === 0 || isHost) {
             io.to(roomCode).emit('room-closed', { reason: 'Host left the lobby.' });

@@ -1,18 +1,21 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { io } from 'socket.io-client'
 import Cloud from '../components/Cloud'
 import DigitPicker from './DigitPicker'
 
 const CLOUD_WIDTHS = Array.from({ length: 16 }, (_, i) => 380 + (i * 41) % 320)
+const LAST_ROOM_KEY = 'fourdigits_last_room'
 
-const JoinLobby = ({ userName, onGameStart, onExit }) => {
+const JoinLobby = ({ userName, rejoinCode, onGameStart, onExit }) => {
     const socketRef = useRef(null)
     const transitioningRef = useRef(false)
-    const roomCodeRef = useRef('')
+    const roomCodeRef = useRef(rejoinCode || '')
+    // Keep latest join handler in a ref so the socket 'connect' closure can call it
+    const joinHandlerRef = useRef(null)
 
     const [isRevealing, setIsRevealing] = useState(true)
     const [phase, setPhase] = useState('discover') // 'discover' | 'lobby'
-    const [roomCode, setRoomCode] = useState('')
+    const [roomCode, setRoomCode] = useState(rejoinCode || '')
     const [availableRooms, setAvailableRooms] = useState([])
     const [players, setPlayers] = useState([])
     const [error, setError] = useState('')
@@ -20,62 +23,46 @@ const JoinLobby = ({ userName, onGameStart, onExit }) => {
     const [imReady, setImReady] = useState(false)
     const [connecting, setConnecting] = useState(false)
     const [loadingRooms, setLoadingRooms] = useState(true)
+    const [digitCount, setDigitCount] = useState(4)
+    const [pendingJoinCode, setPendingJoinCode] = useState(null)
+    const [passwordInput, setPasswordInput] = useState('')
 
     // Keep ref in sync
     useEffect(() => { roomCodeRef.current = roomCode }, [roomCode])
 
-    useEffect(() => {
-        const revealTimer = setTimeout(() => setIsRevealing(false), 2500)
-
-        // Connect via Vite proxy — auto-works for all LAN players
-        // Allow polling+websocket negotiation — polling first prevents the
-        // 'WebSocket closed before connection established' warning from the Vite proxy
-        const socket = io({ timeout: 6000, extraHeaders: { 'ngrok-skip-browser-warning': 'true' } })
-        socketRef.current = socket
-
-        socket.on('connect', () => {
-            setError('')
-            fetchRooms(socket)
-        })
-
-        socket.on('connect_error', () => {
-            setLoadingRooms(false)
-            setError('Cannot reach game server. Make sure "npm run server" is running on the host machine.')
-        })
-
-        return () => {
-            clearTimeout(revealTimer)
-            if (!transitioningRef.current) socket.disconnect()
-        }
-    }, [])
-
-    const fetchRooms = (socket) => {
+    const fetchRooms = useCallback((socket) => {
         setLoadingRooms(true)
         socket.emit('get-rooms', (res) => {
             setLoadingRooms(false)
             setAvailableRooms(res.rooms || [])
         })
-    }
+    }, [])
 
-    const handleRefresh = () => {
-        if (socketRef.current?.connected) fetchRooms(socketRef.current)
-    }
-
-    const handleJoinRoom = (code) => {
-        const finalCode = (code || roomCode).trim().toUpperCase()
+    // Core join logic — defined as useCallback so the ref stays fresh
+    const joinRoom = useCallback((socket, code, passwordOverride, rooms) => {
+        const finalCode = (code || roomCodeRef.current).trim().toUpperCase()
         if (!finalCode) { setError('Enter a room code first.'); return }
-
-        const socket = socketRef.current
         if (!socket?.connected) { setError('Not connected to server. Refresh the page.'); return }
+
+        // Check if this room requires a password and we don't have one yet
+        const roomMeta = (rooms || []).find(r => r.code === finalCode)
+        if (roomMeta?.hasPassword && passwordOverride === undefined) {
+            setPendingJoinCode(finalCode)
+            setPasswordInput('')
+            return
+        }
 
         setConnecting(true)
         setError('')
 
-        socket.emit('join-room', { roomCode: finalCode, playerName: userName }, (res) => {
+        socket.emit('join-room', { roomCode: finalCode, playerName: userName, password: passwordOverride || null }, (res) => {
             setConnecting(false)
+            setPendingJoinCode(null)
+            setPasswordInput('')
             if (res.success) {
-                // If the game is already running, jump straight to GameScreen
+                // Game already running → go straight to GameScreen
                 if (res.spectator || res.rejoined) {
+                    localStorage.setItem(LAST_ROOM_KEY, JSON.stringify({ roomCode: finalCode, playerName: userName }))
                     transitioningRef.current = true
                     setTimeout(() => onGameStart({
                         players: res.players,
@@ -84,16 +71,17 @@ const JoinLobby = ({ userName, onGameStart, onExit }) => {
                         roomCode: finalCode,
                         spectator: res.spectator || false,
                         rejoined: res.rejoined || false,
+                        digitCount: res.digitCount || 4,
                     }), 300)
                     return
                 }
 
+                setDigitCount(res.digitCount || 4)
                 setRoomCode(finalCode)
                 roomCodeRef.current = finalCode
                 setPlayers(res.players)
                 setPhase('lobby')
 
-                // Attach lobby listeners once inside the room
                 socket.off('player-joined')
                 socket.off('lobby-update')
                 socket.off('room-closed')
@@ -105,6 +93,7 @@ const JoinLobby = ({ userName, onGameStart, onExit }) => {
 
                 socket.on('room-closed', ({ reason }) => {
                     if (transitioningRef.current) return
+                    localStorage.removeItem(LAST_ROOM_KEY)
                     setError(reason || 'Room was closed.')
                     setPhase('discover')
                     setPlayers([])
@@ -113,6 +102,7 @@ const JoinLobby = ({ userName, onGameStart, onExit }) => {
 
                 socket.on('kicked', ({ reason }) => {
                     if (transitioningRef.current) return
+                    localStorage.removeItem(LAST_ROOM_KEY)
                     setError(reason || 'You were kicked from the room.')
                     setPhase('discover')
                     setPlayers([])
@@ -120,7 +110,8 @@ const JoinLobby = ({ userName, onGameStart, onExit }) => {
                     fetchRooms(socket)
                 })
 
-                socket.on('game-started', ({ players }) => {
+                socket.on('game-started', ({ players, digitCount: dc }) => {
+                    localStorage.setItem(LAST_ROOM_KEY, JSON.stringify({ roomCode: finalCode, playerName: userName }))
                     transitioningRef.current = true
                     setTimeout(() => onGameStart({
                         players,
@@ -129,13 +120,50 @@ const JoinLobby = ({ userName, onGameStart, onExit }) => {
                         roomCode: roomCodeRef.current,
                         spectator: false,
                         rejoined: false,
+                        digitCount: dc || 4,
                     }), 300)
                 })
             } else {
                 setError(res.error || 'Failed to join room.')
             }
         })
+    }, [userName, onGameStart, fetchRooms])
 
+    // Keep the ref fresh after every re-render
+    useEffect(() => { joinHandlerRef.current = joinRoom }, [joinRoom])
+
+    // Socket setup — runs once on mount
+    useEffect(() => {
+        const revealTimer = setTimeout(() => setIsRevealing(false), 2500)
+        const socket = io({ timeout: 6000, extraHeaders: { 'ngrok-skip-browser-warning': 'true' } })
+        socketRef.current = socket
+
+        socket.on('connect', () => {
+            setError('')
+            fetchRooms(socket)
+            // Auto-join if a rejoin code was passed in
+            if (rejoinCode) {
+                joinHandlerRef.current(socket, rejoinCode, undefined, [])
+            }
+        })
+
+        socket.on('connect_error', () => {
+            setLoadingRooms(false)
+            setError('Cannot reach game server. Make sure "npm run server" is running on the host machine.')
+        })
+
+        return () => {
+            clearTimeout(revealTimer)
+            if (!transitioningRef.current) socket.disconnect()
+        }
+    }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+    const handleRefresh = () => {
+        if (socketRef.current?.connected) fetchRooms(socketRef.current)
+    }
+
+    const handleJoinRoom = (code, passwordOverride) => {
+        joinRoom(socketRef.current, code, passwordOverride, availableRooms)
     }
 
     const handleDigitsChosen = (digits) => {
@@ -151,14 +179,50 @@ const JoinLobby = ({ userName, onGameStart, onExit }) => {
         <div className='bg-[#4CAF50] h-screen w-screen relative overflow-hidden flex flex-col items-center justify-center gap-6 p-8'>
 
             {showDigitPicker && (
-                <DigitPicker onConfirm={handleDigitsChosen} onCancel={() => setShowDigitPicker(false)} />
+                <DigitPicker digitCount={digitCount} onConfirm={handleDigitsChosen} onCancel={() => setShowDigitPicker(false)} />
+            )}
+
+            {/* Password Prompt Modal */}
+            {pendingJoinCode && (
+                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setPendingJoinCode(null)}>
+                    <div className="bg-white rounded-3xl p-6 shadow-2xl border-b-8 border-amber-400/40 w-full max-w-xs flex flex-col gap-4" onClick={e => e.stopPropagation()}>
+                        <div className="text-center">
+                            <span className="text-4xl">🔒</span>
+                            <h3 className="bungee-font text-amber-700 text-xl mt-2">ROOM PASSWORD</h3>
+                            <p className="text-gray-400 text-[11px] bungee-font tracking-wider mt-1">ENTER THE 4-DIGIT PIN</p>
+                        </div>
+                        <input
+                            autoFocus
+                            className="w-full p-4 rounded-2xl border-2 border-amber-200 focus:border-amber-400 outline-none text-2xl font-bold text-center tracking-[0.5em] text-amber-800 bg-amber-50"
+                            type="password"
+                            inputMode="numeric"
+                            maxLength={4}
+                            placeholder="••••"
+                            value={passwordInput}
+                            onChange={e => setPasswordInput(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                            onKeyDown={e => e.key === 'Enter' && passwordInput.length === 4 && handleJoinRoom(pendingJoinCode, passwordInput)}
+                        />
+                        <div className="flex gap-3">
+                            <button onClick={() => setPendingJoinCode(null)} className="flex-1 py-3 rounded-2xl bg-gray-100 text-gray-500 bungee-font hover:bg-gray-200 transition-all">
+                                CANCEL
+                            </button>
+                            <button
+                                disabled={passwordInput.length !== 4 || connecting}
+                                onClick={() => handleJoinRoom(pendingJoinCode, passwordInput)}
+                                className="flex-1 py-3 rounded-2xl bg-amber-400 hover:bg-amber-500 text-white bungee-font shadow-[0_4px_0_0_#d97706] active:shadow-none active:translate-y-1 transition-all disabled:opacity-50"
+                            >
+                                {connecting ? '⏳' : '→ JOIN'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
 
             {/* Reveal Clouds */}
             {isRevealing && (
                 <div className="cloud-transition-overlay">
                     {CLOUD_WIDTHS.map((w, i) => (
-                        <div key={i} className="transition-cloud animate-rise"
+                        <div key={`cloud-${i}`} className="transition-cloud animate-rise"
                             style={{
                                 left: `${(i % 4) * 28 - 10}%`,
                                 bottom: `-${Math.floor(i / 4) * 28 + 10}vh`,
@@ -232,7 +296,7 @@ const JoinLobby = ({ userName, onGameStart, onExit }) => {
                                             onClick={() => handleJoinRoom(room.code)}
                                             className={`flex items-center justify-between rounded-2xl px-4 py-3 border-2 transition-all text-left ${room.isFull
                                                 ? 'bg-gray-50 border-gray-200 opacity-60 cursor-not-allowed'
-                                                : 'bg-green-50 hover:bg-green-100 border-green-200 hover:border-green-400 active:scale-98 cursor-pointer'
+                                                : 'bg-green-50 hover:bg-green-100 border-green-200 hover:border-green-400 cursor-pointer'
                                                 }`}
                                         >
                                             <div className="flex flex-col">
@@ -241,11 +305,15 @@ const JoinLobby = ({ userName, onGameStart, onExit }) => {
                                                     <span className={`bungee-font text-xs px-2 py-0.5 rounded-full ${room.isFull ? 'bg-red-100 text-red-600' : 'bg-amber-100 text-amber-700'}`}>
                                                         {room.playerCount}/{room.maxPlayers}
                                                     </span>
+                                                    {room.digitCount && room.digitCount !== 4 && (
+                                                        <span className="bungee-font text-[10px] px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-600">{room.digitCount}D</span>
+                                                    )}
+                                                    {room.hasPassword && <span className="text-xs">🔒</span>}
                                                 </div>
                                                 <span className="text-green-500 text-xs">👑 {room.hostName}</span>
                                             </div>
                                             <span className={`bungee-font text-sm px-3 py-2 rounded-xl ${room.isFull ? 'bg-gray-100 text-gray-400' : 'bg-green-100 text-green-600'}`}>
-                                                {connecting ? '⏳' : room.isFull ? 'FULL' : '→ JOIN'}
+                                                {connecting ? '⏳' : room.isFull ? 'FULL' : room.hasPassword ? '🔒 JOIN' : '→ JOIN'}
                                             </span>
                                         </button>
                                     ))}
@@ -270,6 +338,7 @@ const JoinLobby = ({ userName, onGameStart, onExit }) => {
                                 onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
                                 onKeyDown={(e) => e.key === 'Enter' && handleJoinRoom(roomCode)}
                                 maxLength={6}
+                                autoComplete="off"
                             />
                             <button
                                 disabled={connecting || !roomCode.trim()}

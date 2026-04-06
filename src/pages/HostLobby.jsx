@@ -4,11 +4,12 @@ import Cloud from '../components/Cloud'
 import DigitPicker from './DigitPicker'
 
 const CLOUD_WIDTHS = Array.from({ length: 16 }, (_, i) => 380 + (i * 41) % 320)
+const LAST_ROOM_KEY = 'fourdigits_last_room'
 
 const HostLobby = ({ userName, onGameStart, onExit }) => {
     const socketRef = useRef(null)
-    const transitioningRef = useRef(false)  // KEY FIX: prevent cleanup from killing socket mid-transition
-    const roomCodeRef = useRef('')          // avoid stale closure on room code
+    const transitioningRef = useRef(false)
+    const roomCodeRef = useRef('')
     const [isRevealing, setIsRevealing] = useState(true)
     const [roomCode, setRoomCode] = useState('')
     const [serverIP, setServerIP] = useState('...')
@@ -18,12 +19,14 @@ const HostLobby = ({ userName, onGameStart, onExit }) => {
     const [imReady, setImReady] = useState(false)
     const [copied, setCopied] = useState(false)
 
+    // ── Room settings ─────────────────────────────────────────────
+    const [digitCount, setDigitCount] = useState(4)          // 4–8
+    const [roomPassword, setRoomPassword] = useState('')      // empty = no password
+    const [settingsApplied, setSettingsApplied] = useState(false)
+    const [showSettings, setShowSettings] = useState(false)
+
     useEffect(() => {
         const revealTimer = setTimeout(() => setIsRevealing(false), 2500)
-
-        // Connect via Vite proxy — no port needed, works for all LAN players
-        // Allow polling+websocket negotiation — polling first prevents the
-        // 'WebSocket closed before connection established' warning from the Vite proxy
         const socket = io({ extraHeaders: { 'ngrok-skip-browser-warning': 'true' } })
         socketRef.current = socket
 
@@ -48,25 +51,49 @@ const HostLobby = ({ userName, onGameStart, onExit }) => {
         socket.on('lobby-update', ({ players }) => setPlayers(players))
 
         socket.on('room-closed', ({ reason }) => {
-            if (transitioningRef.current) return  // ignore if we're going to game
+            if (transitioningRef.current) return
             setError(reason || 'Room closed.')
             setTimeout(onExit, 2000)
         })
 
-        socket.on('game-started', ({ players }) => {
+        socket.on('game-started', ({ players, digitCount: dc }) => {
+            // Save room for rejoin
+            localStorage.setItem(LAST_ROOM_KEY, JSON.stringify({ roomCode: roomCodeRef.current, playerName: userName }))
             transitioningRef.current = true
-            // Delay so the GameScreen mounts before we hand off
-            setTimeout(() => onGameStart({ players, socket, isHost: true, roomCode: roomCodeRef.current }), 300)
+            setTimeout(() => onGameStart({
+                players,
+                socket,
+                isHost: true,
+                roomCode: roomCodeRef.current,
+                digitCount: dc || 4,
+            }), 300)
         })
 
         return () => {
             clearTimeout(revealTimer)
-            // KEY FIX: only disconnect if we're NOT transitioning to the game
-            if (!transitioningRef.current) {
-                socket.disconnect()
-            }
+            if (!transitioningRef.current) socket.disconnect()
         }
     }, [])
+
+    const applySettings = () => {
+        // Validate password: must be empty or exactly 4 digits
+        if (roomPassword.length > 0 && (roomPassword.length !== 4 || !/^\d{4}$/.test(roomPassword))) {
+            setError('Room password must be exactly 4 digits (or leave empty for no password).')
+            return
+        }
+        socketRef.current?.emit('set-room-settings', {
+            digitCount,
+            password: roomPassword || null,
+        }, (res) => {
+            if (res?.success) {
+                setSettingsApplied(true)
+                setShowSettings(false)
+                setError('')
+            } else {
+                setError(res?.error || 'Failed to apply settings.')
+            }
+        })
+    }
 
     const handleDigitsChosen = (digits) => {
         setImReady(true)
@@ -92,17 +119,84 @@ const HostLobby = ({ userName, onGameStart, onExit }) => {
     const imReadyStatus = myPlayer?.ready ?? imReady
 
     return (
-        <div className='bg-[#4CAF50] h-screen w-screen relative overflow-hidden flex flex-col items-center justify-center gap-6 p-8'>
+        <div className='bg-[#4CAF50] h-screen w-screen relative overflow-hidden flex flex-col items-center justify-center gap-4 p-4 md:p-8'>
 
             {showDigitPicker && (
-                <DigitPicker onConfirm={handleDigitsChosen} onCancel={() => setShowDigitPicker(false)} />
+                <DigitPicker
+                    digitCount={digitCount}
+                    onConfirm={handleDigitsChosen}
+                    onCancel={() => setShowDigitPicker(false)}
+                />
+            )}
+
+            {/* Settings Modal */}
+            {showSettings && (
+                <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowSettings(false)}>
+                    <div className="bg-white rounded-3xl p-6 shadow-2xl border-b-8 border-green-700/30 w-full max-w-sm flex flex-col gap-5" onClick={e => e.stopPropagation()}>
+                        <div className="text-center">
+                            <h3 className="bungee-font text-green-800 text-xl">ROOM SETTINGS</h3>
+                            <p className="text-gray-400 text-[11px] bungee-font tracking-wider mt-1">MUST BE SET BEFORE ANYONE IS READY</p>
+                        </div>
+
+                        {/* Digit count */}
+                        <div>
+                            <p className="text-green-600 bungee-font text-xs tracking-widest mb-3">CODE LENGTH</p>
+                            <div className="grid grid-cols-5 gap-2">
+                                {[4, 5, 6, 7, 8].map(n => (
+                                    <button
+                                        key={n}
+                                        onClick={() => setDigitCount(n)}
+                                        className={`rounded-2xl py-3 bungee-font text-xl transition-all active:scale-95 ${
+                                            digitCount === n
+                                                ? 'bg-green-500 text-white shadow-[0_4px_0_0_#2e7d32] active:shadow-none active:translate-y-1'
+                                                : 'bg-gray-100 text-gray-500 hover:bg-green-100 hover:text-green-600'
+                                        }`}
+                                    >
+                                        {n}
+                                    </button>
+                                ))}
+                            </div>
+                            <p className="text-gray-400 text-[10px] text-center mt-2">All players must guess {digitCount} digits</p>
+                        </div>
+
+                        {/* Password */}
+                        <div>
+                            <p className="text-green-600 bungee-font text-xs tracking-widest mb-2">ROOM PASSWORD <span className="text-gray-300">(OPTIONAL)</span></p>
+                            <input
+                                className="w-full p-4 rounded-2xl border-2 border-gray-100 focus:border-green-400 outline-none text-xl font-bold text-gray-700 bg-gray-50 tracking-[0.4em] text-center"
+                                type="password"
+                                inputMode="numeric"
+                                placeholder="4-digit PIN"
+                                maxLength={4}
+                                value={roomPassword}
+                                onChange={e => setRoomPassword(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                            />
+                            <p className="text-gray-400 text-[10px] text-center mt-1">Leave empty for no password</p>
+                        </div>
+
+                        <div className="flex gap-3 pt-1">
+                            <button
+                                onClick={() => setShowSettings(false)}
+                                className="flex-1 py-3 rounded-2xl bg-white border-4 border-gray-200 text-gray-500 bungee-font hover:bg-red-50 hover:border-red-200 hover:text-red-400 transition-all"
+                            >
+                                CANCEL
+                            </button>
+                            <button
+                                onClick={applySettings}
+                                className="flex-1 py-3 rounded-2xl bg-green-500 hover:bg-green-600 text-white bungee-font shadow-[0_4px_0_0_#2e7d32] active:shadow-none active:translate-y-1 transition-all"
+                            >
+                                ✅ APPLY
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
 
             {/* Reveal Clouds */}
             {isRevealing && (
                 <div className="cloud-transition-overlay">
                     {CLOUD_WIDTHS.map((w, i) => (
-                        <div key={i} className="transition-cloud animate-rise"
+                        <div key={`cloud-${i}`} className="transition-cloud animate-rise"
                             style={{
                                 left: `${(i % 4) * 28 - 10}%`,
                                 bottom: `-${Math.floor(i / 4) * 28 + 10}vh`,
@@ -130,28 +224,55 @@ const HostLobby = ({ userName, onGameStart, onExit }) => {
                 </div>
             )}
 
-            <div className={`w-full max-w-2xl flex flex-col gap-5 transition-all duration-700 delay-300 ${isRevealing ? 'opacity-0 translate-y-8' : 'opacity-100 translate-y-0'}`}>
+            <div className={`w-full max-w-2xl flex flex-col gap-4 transition-all duration-700 delay-300 ${isRevealing ? 'opacity-0 translate-y-8' : 'opacity-100 translate-y-0'}`}>
 
                 {/* Header */}
                 <div className="text-center">
-                    <h1 className="bungee-font text-white text-5xl drop-shadow-lg">HOST LOBBY</h1>
-                    <p className="text-white/70 bungee-font text-xs tracking-widest mt-1">SHARE YOUR IP — OTHERS CAN DISCOVER YOUR ROOM</p>
+                    <h1 className="bungee-font text-white text-4xl md:text-5xl drop-shadow-lg">HOST LOBBY</h1>
+                    <p className="text-white/70 bungee-font text-xs tracking-widest mt-1">SHARE YOUR ROOM CODE — OTHERS JOIN VIA CODE</p>
                 </div>
 
-                {/* IP + Room Code */}
-                <div className="bg-white/90 backdrop-blur-sm rounded-3xl p-6 shadow-2xl border-b-8 border-green-700/30 flex flex-col gap-4">
-                    <div className="flex gap-4">
-                        <div className="flex-1 bg-green-50 rounded-2xl p-4 border-2 border-green-200">
-                            <p className="text-green-600 bungee-font text-xs tracking-widest mb-1">LAN IP ADDRESS</p>
-                            <p className="text-green-800 bungee-font text-2xl">{serverIP}</p>
-                            <p className="text-green-500 text-xs mt-1">Share this IP so players can find you</p>
-                        </div>
+                {/* Room Code + Settings row */}
+                <div className="bg-white/90 backdrop-blur-sm rounded-3xl p-4 md:p-6 shadow-2xl border-b-8 border-green-700/30 flex flex-col gap-4">
+                    <div className="flex gap-3">
+                        {/* Room code */}
                         <div className="flex-1 bg-amber-50 rounded-2xl p-4 border-2 border-amber-200">
                             <p className="text-amber-600 bungee-font text-xs tracking-widest mb-1">ROOM CODE</p>
                             <p className="text-amber-800 bungee-font text-3xl tracking-widest">{roomCode || '------'}</p>
-                            <p className="text-amber-400 text-xs mt-1">Auto-discovered on LAN</p>
+                        </div>
+                        {/* Settings pill */}
+                        <div className="flex flex-col gap-2 justify-center">
+                            <button
+                                onClick={() => setShowSettings(true)}
+                                disabled={players.some(p => p.ready)}
+                                className={`flex flex-col items-center gap-0.5 px-3 py-3 rounded-2xl border-2 transition-all ${
+                                    settingsApplied
+                                        ? 'bg-green-50 border-green-300 text-green-700'
+                                        : 'bg-gray-50 border-gray-200 text-gray-500 hover:bg-gray-100'
+                                } disabled:opacity-40 disabled:cursor-not-allowed`}
+                                title="Room Settings"
+                            >
+                                <span className="text-xl">⚙️</span>
+                                <span className="bungee-font text-[10px] tracking-wider">{digitCount}D{roomPassword ? ' 🔒' : ''}</span>
+                            </button>
                         </div>
                     </div>
+
+                    {/* Settings summary pill */}
+                    {settingsApplied && (
+                        <div className="flex gap-2 flex-wrap">
+                            <span className="bg-green-100 text-green-700 bungee-font text-[10px] px-3 py-1 rounded-full tracking-widest">
+                                {digitCount}-DIGIT CODE
+                            </span>
+                            {roomPassword && (
+                                <span className="bg-amber-100 text-amber-700 bungee-font text-[10px] px-3 py-1 rounded-full tracking-widest">
+                                    🔒 PASSWORD SET
+                                </span>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Copy + Share row */}
                     <div className="flex gap-2">
                         <button
                             onClick={() => copyToClipboard(roomCode)}
@@ -175,11 +296,11 @@ const HostLobby = ({ userName, onGameStart, onExit }) => {
                 </div>
 
                 {/* Players List */}
-                <div className="bg-white/90 backdrop-blur-sm rounded-3xl p-6 shadow-2xl border-b-8 border-green-700/30">
+                <div className="bg-white/90 backdrop-blur-sm rounded-3xl p-4 md:p-6 shadow-2xl border-b-8 border-green-700/30">
                     <p className="text-green-700 bungee-font text-xs tracking-widest mb-4">
                         PLAYERS ({players.length}/8) {players.length < 2 && '— Waiting for others...'}
                     </p>
-                    <div className="flex flex-col gap-3 max-h-48 overflow-y-auto">
+                    <div className="flex flex-col gap-3 max-h-40 overflow-y-auto">
                         {players.map((p, i) => {
                             const isMe = p.id === socketRef.current?.id
                             return (
@@ -198,7 +319,6 @@ const HostLobby = ({ userName, onGameStart, onExit }) => {
                                         <span className={`text-xl transition-all ${p.ready ? '' : 'opacity-25'}`}>
                                             {p.ready ? '✅' : '⏳'}
                                         </span>
-                                        {/* Kick button — only for other players */}
                                         {!isMe && (
                                             <button
                                                 onClick={() => socketRef.current?.emit('kick-player', { targetId: p.id })}

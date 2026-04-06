@@ -1,19 +1,55 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import Cloud from '../components/Cloud'
 
+const LAST_ROOM_KEY = 'fourdigits_last_room'   // { roomCode, playerName }
+const SAVED_NAME_KEY = 'fourdigits_player_name'
+
 const IntScreen = ({ onStart }) => {
-    const [name, setName] = useState('')
+    const [name, setName] = useState(() => localStorage.getItem(SAVED_NAME_KEY) || '')
     const [isTransitioning, setIsTransitioning] = useState(false)
     const [pendingAction, setPendingAction] = useState(null)
+    const [lastRoom, setLastRoom] = useState(null)
+
+    // Load last room on mount
+    useEffect(() => {
+        try {
+            const stored = localStorage.getItem(LAST_ROOM_KEY)
+            if (stored) setLastRoom(JSON.parse(stored))
+        } catch (_) {
+            localStorage.removeItem(LAST_ROOM_KEY)
+        }
+    }, [])
+
+    // Persist name whenever it changes
+    const handleNameChange = (e) => {
+        const val = e.target.value
+        setName(val)
+        if (val.trim()) localStorage.setItem(SAVED_NAME_KEY, val.trim())
+    }
 
     const handleAction = (action) => {
         if (!name.trim()) return
+        localStorage.setItem(SAVED_NAME_KEY, name.trim())
         setPendingAction(action)
         setIsTransitioning(true)
         setTimeout(() => {
             onStart(name.trim(), action)
         }, 1300)
     }
+
+    const handleRejoin = () => {
+        if (!lastRoom) return
+        const playerName = name.trim() || lastRoom.playerName
+        if (!playerName) return
+        localStorage.setItem(SAVED_NAME_KEY, playerName)
+        setIsTransitioning(true)
+        setTimeout(() => {
+            // Navigate to JoinLobby with the saved room code pre-filled
+            onStart(playerName, 'join', lastRoom.roomCode)
+        }, 1300)
+    }
+
+    const cloudsArr = Array.from({ length: 16 })
 
     return (
         <div className='bg-[#4CAF50] h-screen w-screen relative overflow-hidden flex justify-center items-center'>
@@ -39,7 +75,7 @@ const IntScreen = ({ onStart }) => {
                 </h1>
                 <p className='text-white/70 bungee-font text-sm tracking-widest mb-8'>MULTIPLAYER FUN GAME</p>
 
-                <div className="w-[400px] bg-white/90 backdrop-blur-sm p-8 rounded-3xl shadow-2xl border-b-8 border-green-700/30 flex flex-col gap-5">
+                <div className="w-[min(400px,90vw)] bg-white/90 backdrop-blur-sm p-6 md:p-8 rounded-3xl shadow-2xl border-b-8 border-green-700/30 flex flex-col gap-4">
                     {/* Name input */}
                     <div>
                         <label className="text-green-700 bungee-font text-xs tracking-widest block mb-2">YOUR NAME</label>
@@ -48,16 +84,46 @@ const IntScreen = ({ onStart }) => {
                             type="text"
                             placeholder='Type your name...'
                             value={name}
-                            onChange={(e) => setName(e.target.value)}
+                            onChange={handleNameChange}
                             onKeyDown={(e) => e.key === 'Enter' && handleAction('create')}
                             maxLength={16}
+                            autoComplete="off"
                         />
                     </div>
+
+                    {/* Rejoin banner */}
+                    {lastRoom && (
+                        <div className="bg-amber-50 border-2 border-amber-200 rounded-2xl px-4 py-3 flex items-center justify-between gap-3">
+                            <div className="min-w-0">
+                                <p className="text-amber-600 bungee-font text-[10px] tracking-widest">LAST ROOM</p>
+                                <p className="text-amber-800 bungee-font text-lg tracking-widest truncate">{lastRoom.roomCode}</p>
+                            </div>
+                            <div className="flex gap-2 flex-shrink-0">
+                                <button
+                                    onClick={handleRejoin}
+                                    disabled={isTransitioning || !name.trim()}
+                                    className="px-3 py-2 rounded-xl bg-amber-400 hover:bg-amber-500 text-white bungee-font text-xs shadow-[0_3px_0_0_#d97706] active:shadow-none active:translate-y-0.5 transition-all disabled:opacity-50"
+                                >
+                                    🔁 REJOIN
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        localStorage.removeItem(LAST_ROOM_KEY)
+                                        setLastRoom(null)
+                                    }}
+                                    className="w-8 h-8 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-400 text-sm flex items-center justify-center transition-all"
+                                    title="Dismiss"
+                                >
+                                    ✕
+                                </button>
+                            </div>
+                        </div>
+                    )}
 
                     {/* Create Game */}
                     <button
                         onClick={() => handleAction('create')}
-                        disabled={isTransitioning}
+                        disabled={isTransitioning || !name.trim()}
                         className='w-full py-5 rounded-2xl cursor-pointer bg-[#FFC107] hover:bg-[#FFB300] active:bg-[#FFA000] text-[#5D4037] bungee-font text-2xl shadow-[0_6px_0_0_#FFA000] active:shadow-none active:translate-y-1.5 transition-all disabled:opacity-50'
                     >
                         🎮 CREATE GAME
@@ -73,7 +139,7 @@ const IntScreen = ({ onStart }) => {
                     {/* Join Game */}
                     <button
                         onClick={() => handleAction('join')}
-                        disabled={isTransitioning}
+                        disabled={isTransitioning || !name.trim()}
                         className='w-full py-5 rounded-2xl cursor-pointer bg-white hover:bg-green-50 active:bg-green-100 text-green-700 bungee-font text-2xl border-4 border-green-200 shadow-[0_6px_0_0_#a7d7a7] active:shadow-none active:translate-y-1.5 transition-all disabled:opacity-50'
                     >
                         🔗 FIND ROOM
@@ -84,9 +150,9 @@ const IntScreen = ({ onStart }) => {
             {/* Transition Overlay */}
             {isTransitioning && (
                 <div className="cloud-transition-overlay">
-                    {[...Array(16)].map((_, i) => (
+                    {cloudsArr.map((_, i) => (
                         <div
-                            key={i}
+                            key={`cloud-${i}`}
                             className="transition-cloud animate-rise"
                             style={{
                                 left: `${(i % 4) * 28 - 10}%`,
