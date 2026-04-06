@@ -76,7 +76,7 @@ const IntScreen = ({ onStart }) => {
                         disabled={isTransitioning}
                         className='w-full py-5 rounded-2xl bg-white hover:bg-green-50 active:bg-green-100 text-green-700 bungee-font text-2xl border-4 border-green-200 shadow-[0_6px_0_0_#a7d7a7] active:shadow-none active:translate-y-1.5 transition-all disabled:opacity-50'
                     >
-                        🔗 JOIN GAME
+                        🔗 FIND ROOM
                     </button>
                 </div>
             </div>

@@ -26,7 +26,7 @@ function getLocalIP() {
 const localIP = getLocalIP();
 const PORT = 4000;
 const MAX_PLAYERS = 8;
-const ROUND_TIME_MS = 60000;
+const ROUND_TIME_MS = 60 * 1000;
 
 const rooms = {};
 
@@ -375,8 +375,9 @@ io.on('connection', (socket) => {
 });
 
 httpServer.listen(PORT, '0.0.0.0', () => {
-    console.log('\n🎮  Four Digits — Game Server');
-    console.log(`    Local:   http://localhost:${PORT}`);
-    console.log(`    Network: http://${localIP}:${PORT}`);
-    console.log(`\n    Players open: http://${localIP}:5173\n`);
+    console.log('\n\x1b[32m🎮  Four Digits — Game Server\x1b[0m');
+    console.log(`\n\x1b[36m👉 ALMOST READY!\x1b[0m Node server is running in the background.`);
+    console.log(`\n\x1b[33m⚠️  DO NOT CLICK THIS SERVER URL.\x1b[0m It has no UI.`);
+    console.log(`\x1b[33m⚠️  INSTEAD, CLICK YOUR VITE SERVER URL (usually http://localhost:5173)\x1b[0m`);
+    console.log(`\n    Players on your network can join using: http://${localIP}:5173\n`);
 });
