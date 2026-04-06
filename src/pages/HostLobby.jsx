@@ -22,7 +22,9 @@ const HostLobby = ({ userName, onGameStart, onExit }) => {
         const revealTimer = setTimeout(() => setIsRevealing(false), 2500)
 
         // Connect via Vite proxy — no port needed, works for all LAN players
-        const socket = io({ transports: ['websocket'] })
+        // Allow polling+websocket negotiation — polling first prevents the
+        // 'WebSocket closed before connection established' warning from the Vite proxy
+        const socket = io()
         socketRef.current = socket
 
         socket.on('connect', () => {
@@ -159,8 +161,8 @@ const HostLobby = ({ userName, onGameStart, onExit }) => {
                         </button>
                         <button
                             onClick={() => {
-                                const text = `Join my Four Digits game! 🎮\nGo to ${window.location.origin} and enter code: ${roomCode}`;
-                                window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, '_blank');
+                                const url = window.location.origin;
+                                window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(url)}`, '_blank');
                             }}
                             className="w-14 bg-[#25D366] hover:bg-[#128C7E] rounded-2xl flex justify-center items-center text-white transition-all active:scale-95 shadow-[0_4px_0_0_#075E54] active:shadow-none active:translate-y-1"
                             title="Share on WhatsApp"

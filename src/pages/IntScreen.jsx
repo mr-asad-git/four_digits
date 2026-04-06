@@ -58,7 +58,7 @@ const IntScreen = ({ onStart }) => {
                     <button
                         onClick={() => handleAction('create')}
                         disabled={isTransitioning}
-                        className='w-full py-5 rounded-2xl bg-[#FFC107] hover:bg-[#FFB300] active:bg-[#FFA000] text-[#5D4037] bungee-font text-2xl shadow-[0_6px_0_0_#FFA000] active:shadow-none active:translate-y-1.5 transition-all disabled:opacity-50'
+                        className='w-full py-5 rounded-2xl cursor-pointer bg-[#FFC107] hover:bg-[#FFB300] active:bg-[#FFA000] text-[#5D4037] bungee-font text-2xl shadow-[0_6px_0_0_#FFA000] active:shadow-none active:translate-y-1.5 transition-all disabled:opacity-50'
                     >
                         🎮 CREATE GAME
                     </button>
@@ -74,7 +74,7 @@ const IntScreen = ({ onStart }) => {
                     <button
                         onClick={() => handleAction('join')}
                         disabled={isTransitioning}
-                        className='w-full py-5 rounded-2xl bg-white hover:bg-green-50 active:bg-green-100 text-green-700 bungee-font text-2xl border-4 border-green-200 shadow-[0_6px_0_0_#a7d7a7] active:shadow-none active:translate-y-1.5 transition-all disabled:opacity-50'
+                        className='w-full py-5 rounded-2xl cursor-pointer bg-white hover:bg-green-50 active:bg-green-100 text-green-700 bungee-font text-2xl border-4 border-green-200 shadow-[0_6px_0_0_#a7d7a7] active:shadow-none active:translate-y-1.5 transition-all disabled:opacity-50'
                     >
                         🔗 FIND ROOM
                     </button>

@@ -28,7 +28,9 @@ const JoinLobby = ({ userName, onGameStart, onExit }) => {
         const revealTimer = setTimeout(() => setIsRevealing(false), 2500)
 
         // Connect via Vite proxy — auto-works for all LAN players
-        const socket = io({ transports: ['websocket'], timeout: 6000 })
+        // Allow polling+websocket negotiation — polling first prevents the
+        // 'WebSocket closed before connection established' warning from the Vite proxy
+        const socket = io({ timeout: 6000 })
         socketRef.current = socket
 
         socket.on('connect', () => {
@@ -172,7 +174,7 @@ const JoinLobby = ({ userName, onGameStart, onExit }) => {
 
                 {/* Header */}
                 <div className="text-center">
-                    <h1 className="bungee-font text-white text-5xl drop-shadow-lg">JOIN GAME</h1>
+                    <h1 className="bungee-font text-white text-5xl cursor-pointer drop-shadow-lg">JOIN GAME</h1>
                     <p className="text-white/70 bungee-font text-xs tracking-widest mt-1">
                         {phase === 'discover' ? 'SELECT A ROOM OR ENTER CODE' : `ROOM ${roomCode} — WAITING FOR HOST`}
                     </p>
@@ -201,7 +203,7 @@ const JoinLobby = ({ userName, onGameStart, onExit }) => {
                                 </div>
                             ) : availableRooms.length === 0 ? (
                                 <div className="text-center py-8 text-green-400 bungee-font text-sm">
-                                    No open rooms found.<br/>
+                                    No open rooms found.<br />
                                     <span className="text-xs opacity-70">Ask the host to create one, then click Refresh.</span>
                                 </div>
                             ) : (
@@ -211,11 +213,10 @@ const JoinLobby = ({ userName, onGameStart, onExit }) => {
                                             key={room.code}
                                             disabled={connecting || room.isFull}
                                             onClick={() => handleJoinRoom(room.code)}
-                                            className={`flex items-center justify-between rounded-2xl px-4 py-3 border-2 transition-all text-left ${
-                                                room.isFull
-                                                    ? 'bg-gray-50 border-gray-200 opacity-60 cursor-not-allowed'
-                                                    : 'bg-green-50 hover:bg-green-100 border-green-200 hover:border-green-400 active:scale-98 cursor-pointer'
-                                            }`}
+                                            className={`flex items-center justify-between rounded-2xl px-4 py-3 border-2 transition-all text-left ${room.isFull
+                                                ? 'bg-gray-50 border-gray-200 opacity-60 cursor-not-allowed'
+                                                : 'bg-green-50 hover:bg-green-100 border-green-200 hover:border-green-400 active:scale-98 cursor-pointer'
+                                                }`}
                                         >
                                             <div className="flex flex-col">
                                                 <div className="flex items-center gap-2">
@@ -263,7 +264,7 @@ const JoinLobby = ({ userName, onGameStart, onExit }) => {
                         </div>
 
                         <button onClick={onExit}
-                            className='w-full py-4 rounded-2xl bg-white border-4 border-green-200 text-green-600 bungee-font text-lg hover:bg-red-50 hover:border-red-200 hover:text-red-500 transition-all'>
+                            className='w-full py-4 rounded-2xl cursor-pointer bg-white border-4 border-green-200 text-green-600 bungee-font text-lg hover:bg-red-50 hover:border-red-200 hover:text-red-500 transition-all'>
                             ← BACK
                         </button>
                     </div>

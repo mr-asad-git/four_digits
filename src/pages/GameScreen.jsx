@@ -476,11 +476,7 @@ const GameScreen = ({ userName, gameData, onExit }) => {
                 </div>
             )}
             
-            {/* Inject small style for hiding scrollbars on mobile lists */}
-            <style jsx="true">{`
-                .hide-scroll::-webkit-scrollbar { display: none; }
-                .hide-scroll { -ms-overflow-style: none; scrollbar-width: none; }
-            `}</style>
+            {/* Scrollbar hiding handled via .hide-scroll in App.css */}
         </div>
     )
 }

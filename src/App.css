@@ -45,3 +45,7 @@
   left: 50%;
   transform: translateX(-50%) translateY(120vh);
 }
+
+/* Hide scrollbar cross-browser — used on player card rows in GameScreen */
+.hide-scroll::-webkit-scrollbar { display: none; }
+.hide-scroll { -ms-overflow-style: none; scrollbar-width: none; }
