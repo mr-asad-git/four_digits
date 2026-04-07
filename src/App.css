@@ -49,3 +49,12 @@
 /* Hide scrollbar cross-browser — used on player card rows in GameScreen */
 .hide-scroll::-webkit-scrollbar { display: none; }
 .hide-scroll { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* Target avatar pulse glow */
+@keyframes target-glow {
+  0%, 100% { box-shadow: 0 0 0 3px rgba(255,255,255,0.5), 0 0 14px 4px rgba(255,255,255,0.35); }
+  50%        { box-shadow: 0 0 0 5px rgba(255,255,255,0.8), 0 0 22px 8px rgba(255,255,255,0.55); }
+}
+.avatar-target-glow {
+  animation: target-glow 1.4s ease-in-out infinite;
+}
