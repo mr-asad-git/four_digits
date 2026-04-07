@@ -103,6 +103,7 @@ const HistoryModal = ({ player, history, onClose, isMe }) => {
 
 // ── Left Panel: Player Info Card ─────────────────────────────────
 const PlayerInfoCard = ({ player, isTarget, isEliminated, isMe, submittedIds, receivedGuesses = [], onOpenHistory }) => {
+    const [showCode, setShowCode] = useState(false)
     const isOffline = player.disconnected
     const hasSubmitted = submittedIds.includes(player.id)
     const latestGuess = receivedGuesses.length > 0 ? receivedGuesses[receivedGuesses.length - 1] : null
@@ -128,23 +129,41 @@ const PlayerInfoCard = ({ player, isTarget, isEliminated, isMe, submittedIds, re
                     {isMe && <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-yellow-400 rounded-full border-2 border-white/80" />}
                 </div>
 
-                {/* Name + badges */}
-                <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                        <p className={`bungee-font text-sm leading-tight truncate ${isEliminated || isOffline ? 'text-white/40 line-through' : 'text-white'}`}>
-                            {player.name}
-                        </p>
-                        {isMe && <span className="text-yellow-300 text-[9px] bungee-font bg-yellow-300/20 px-1.5 py-0.5 rounded-full flex-shrink-0">YOU</span>}
-                        {isTarget && <span className="text-yellow-900 text-[9px] bungee-font bg-yellow-300 px-1.5 py-0.5 rounded-full flex-shrink-0">TARGET</span>}
-                        {isEliminated && <span className="text-red-300 text-[9px] bungee-font">OUT</span>}
-                        {isOffline && <span className="text-red-300 text-[9px] bungee-font bg-red-500/20 px-1.5 py-0.5 rounded-full flex-shrink-0">OFFLINE</span>}
+                {/* Name + badges + History Button */}
+                <div className="flex-1 min-w-0 flex items-start justify-between">
+                    <div>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                            {isMe && player.digits && (
+                                <div className="flex items-center bg-black/20 rounded pl-1.5 pr-2 py-0.5 gap-1 border border-white/10 shadow-inner">
+                                    <button
+                                        onPointerDown={() => setShowCode(true)}
+                                        onPointerUp={() => setShowCode(false)}
+                                        onPointerLeave={() => setShowCode(false)}
+                                        className="text-[10px] active:scale-90 transition-transform outline-none"
+                                        title="Hold to reveal"
+                                    >
+                                        {showCode ? '🔓' : '🔒'}
+                                    </button>
+                                    <span className={`bungee-font text-[11px] tracking-widest ${showCode ? 'text-amber-300' : 'text-white/30'}`}>
+                                        {showCode ? player.digits.join('') : '••••'}
+                                    </span>
+                                </div>
+                            )}
+                            <p className={`bungee-font text-sm leading-tight truncate ${isEliminated || isOffline ? 'text-white/40 line-through' : 'text-white'}`}>
+                                {player.name}
+                            </p>
+                            {isMe && <span className="text-yellow-300 text-[9px] bungee-font bg-yellow-300/20 px-1.5 py-0.5 rounded-full flex-shrink-0">YOU</span>}
+                            {isTarget && <span className="text-yellow-900 text-[9px] bungee-font bg-yellow-300 px-1.5 py-0.5 rounded-full flex-shrink-0">TARGET</span>}
+                            {isEliminated && <span className="text-red-300 text-[9px] bungee-font">OUT</span>}
+                            {isOffline && <span className="text-red-300 text-[9px] bungee-font bg-red-500/20 px-1.5 py-0.5 rounded-full flex-shrink-0">OFFLINE</span>}
+                        </div>
+                        {/* Submitted indicator */}
+                        {!isEliminated && !isOffline && !isTarget && (
+                            <p className={`text-[9px] bungee-font mt-0.5 ${hasSubmitted ? 'text-green-300' : 'text-white/30'}`}>
+                                {hasSubmitted ? '✓ SUBMITTED' : '· THINKING...'}
+                            </p>
+                        )}
                     </div>
-                    {/* Submitted indicator */}
-                    {!isEliminated && !isOffline && !isTarget && (
-                        <p className={`text-[9px] bungee-font mt-0.5 ${hasSubmitted ? 'text-green-300' : 'text-white/30'}`}>
-                            {hasSubmitted ? '✓ SUBMITTED' : '· THINKING...'}
-                        </p>
-                    )}
                 </div>
             </div>
 
@@ -269,6 +288,7 @@ const GameScreen = ({ userName, gameData, onExit }) => {
     const [submitted, setSubmitted] = useState(false)
     const [exitConfirm, setExitConfirm] = useState(false)
     const [historyPlayerId, setHistoryPlayerId] = useState(null)
+    const [guessLogTab, setGuessLogTab] = useState('all')
 
     // Mobile drawer state
     const [mobilePanel, setMobilePanel] = useState(null) // 'players' | 'guesses' | null
@@ -390,6 +410,7 @@ const GameScreen = ({ userName, gameData, onExit }) => {
         return entries.map((entry, idx) => {
             const targetPlayer = allPlayers.find(p => p.id === entry.targetId)
             return {
+                guesserId: guesserSocketId,
                 guesserName,
                 targetName: targetPlayer?.name || 'Unknown',
                 guess: entry.guess,
@@ -438,24 +459,56 @@ const GameScreen = ({ userName, gameData, onExit }) => {
     )
 
     const GuessLogPanel = () => {
-        const feedSlice = guessFeed.slice(0, 10).reverse()
+        const filteredFeed = guessLogTab === 'all'
+            ? guessFeed
+            : guessFeed.filter(g => g.guesserId === guessLogTab)
+
+        const feedSlice = filteredFeed.slice(0, 20).reverse()
+
         return (
-            <div className="flex flex-col gap-2 px-3 py-3">
-                <p className="bungee-font text-white/40 text-[9px] tracking-widest px-0.5">
-                    GUESS LOG · {guessFeed.length}{guessFeed.length > 10 ? ' (latest 10)' : ''}
-                </p>
-                {feedSlice.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center gap-2 py-5">
-                        <p className="text-3xl opacity-30">🎯</p>
-                        <p className="text-white/30 bungee-font text-xs text-center leading-relaxed">
-                            No guesses yet.<br />They'll appear here.
-                        </p>
-                    </div>
-                ) : (
-                    feedSlice.map((entry, i) => (
-                        <GuessFeedEntry key={`feed-${i}`} entry={entry} />
-                    ))
-                )}
+            <div className="flex flex-col px-3 py-3 h-full">
+                {/* Tabs */}
+                <div className="flex overflow-x-auto hide-scroll gap-2 mb-3 pb-1 flex-shrink-0" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                    <button
+                        onClick={() => setGuessLogTab('all')}
+                        className={`flex-shrink-0 px-3 py-1.5 rounded-lg bungee-font text-[10px] transition-all border-2 ${guessLogTab === 'all'
+                                ? 'bg-white/20 border-white/40 text-white shadow-sm'
+                                : 'bg-black/20 border-black/10 text-white/50 hover:bg-black/30'
+                            }`}
+                    >
+                        ALL
+                    </button>
+                    {gamePlayers.map(p => (
+                        <button
+                            key={p.id}
+                            onClick={() => setGuessLogTab(p.id)}
+                            className={`flex-shrink-0 px-3 py-1.5 rounded-lg bungee-font text-[10px] transition-all border-2 ${guessLogTab === p.id
+                                    ? 'bg-white/20 border-white/40 text-white shadow-sm'
+                                    : 'bg-black/20 border-black/10 text-white/50 hover:bg-black/30'
+                                }`}
+                        >
+                            {p.name.length > 8 ? p.name.slice(0, 8) + '...' : p.name}
+                        </button>
+                    ))}
+                </div>
+
+                <div className="flex flex-col gap-2 flex-1 overflow-y-auto hide-scroll pr-1">
+                    <p className="bungee-font text-white/40 text-[9px] tracking-widest px-0.5">
+                        {guessLogTab === 'all' ? 'GUESS LOG' : 'THEIR GUESSES'} · {filteredFeed.length}{filteredFeed.length > 20 ? ' (latest 20)' : ''}
+                    </p>
+                    {feedSlice.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center gap-2 py-5">
+                            <p className="text-3xl opacity-30">🎯</p>
+                            <p className="text-white/30 bungee-font text-xs text-center leading-relaxed">
+                                No guesses yet.<br />They'll appear here.
+                            </p>
+                        </div>
+                    ) : (
+                        feedSlice.map((entry, i) => (
+                            <GuessFeedEntry key={`feed-${i}`} entry={entry} />
+                        ))
+                    )}
+                </div>
             </div>
         )
     }
