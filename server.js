@@ -465,6 +465,13 @@ io.on('connection', (socket) => {
             const player = room.players.find(p => p.id === socket.id);
             if (player) player.disconnected = true;
 
+            const connectedCount = room.players.filter(p => !p.disconnected).length;
+            if (connectedCount === 0) {
+                console.log(`[-] Room ${roomCode} closed — all players disconnected.`);
+                delete rooms[roomCode];
+                return;
+            }
+
             broadcastPlayerStatus(roomCode);
 
             const gs = room.gameState;

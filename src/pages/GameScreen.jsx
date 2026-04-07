@@ -212,6 +212,8 @@ const TimerBar = ({ expiresAt }) => {
     )
 }
 
+const LAST_ROOM_KEY = 'fourdigits_last_room'
+
 // ── Main GameScreen ──────────────────────────────────────────────
 const GameScreen = ({ userName, gameData, onExit }) => {
     const socketRef = useRef(gameData?.socket)
@@ -240,6 +242,12 @@ const GameScreen = ({ userName, gameData, onExit }) => {
     const [currentGuess, setCurrentGuess] = useState([])
     const [submitted, setSubmitted] = useState(false)
     const [exitConfirm, setExitConfirm] = useState(false)
+
+    // Clear saved room & exit (voluntary leave)
+    const handleLeave = () => {
+        localStorage.removeItem(LAST_ROOM_KEY)
+        onExit()
+    }
     const [historyPlayerId, setHistoryPlayerId] = useState(null) // Which player's history to show
 
     // ── Cloud reveal ─────────────────────────────────────────────
@@ -396,7 +404,7 @@ const GameScreen = ({ userName, gameData, onExit }) => {
                         <p className="bungee-font text-green-800 text-xl text-center">LEAVE THE GAME?</p>
                         <div className="flex gap-4 w-full">
                             <button onClick={() => setExitConfirm(false)} className="flex-1 py-4 rounded-2xl bg-white border-4 border-green-200 text-green-600 bungee-font text-lg hover:bg-green-50 transition-all">NO</button>
-                            <button onClick={onExit} className="flex-1 py-4 rounded-2xl bg-red-400 hover:bg-red-500 text-white bungee-font text-lg shadow-[0_4px_0_0_#b91c1c] active:shadow-none active:translate-y-1 transition-all">YES</button>
+                            <button onClick={handleLeave} className="flex-1 py-4 rounded-2xl bg-red-400 hover:bg-red-500 text-white bungee-font text-lg shadow-[0_4px_0_0_#b91c1c] active:shadow-none active:translate-y-1 transition-all">YES, LEAVE</button>
                         </div>
                     </div>
                 </div>
@@ -430,7 +438,7 @@ const GameScreen = ({ userName, gameData, onExit }) => {
                             {winner.id === myId ? '🏆 YOU WIN!' : `🥇 ${winner.name} WINS!`}
                         </h1>
                     </div>
-                    <button onClick={onExit}
+                    <button onClick={handleLeave}
                         className="py-5 px-10 rounded-2xl bg-[#FFC107] hover:bg-[#FFB300] text-[#5D4037] bungee-font text-xl shadow-[0_6px_0_0_#FFA000] active:shadow-none active:translate-y-1.5 transition-all">
                         BACK TO MENU
                     </button>

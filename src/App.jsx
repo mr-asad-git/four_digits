@@ -10,11 +10,8 @@ const App = () => {
     const [screen, setScreen] = useState('intro')
     const [userName, setUserName] = useState('')
     const [gameData, setGameData] = useState(null)
-    const [rejoinCode, setRejoinCode] = useState(null) // pre-fill code on rejoin
-
-    const handleStart = (name, action, prefilledCode) => {
+    const handleStart = (name, action) => {
         setUserName(name)
-        setRejoinCode(prefilledCode || null)
         if (action === 'create') {
             setScreen('host-lobby')
         } else {
@@ -31,7 +28,6 @@ const App = () => {
         setScreen('intro')
         setUserName('')
         setGameData(null)
-        setRejoinCode(null)
     }
 
     return (
@@ -43,7 +39,7 @@ const App = () => {
                 <HostLobby userName={userName} onGameStart={handleGameStart} onExit={handleExit} />
             )}
             {screen === 'join-lobby' && (
-                <JoinLobby userName={userName} rejoinCode={rejoinCode} onGameStart={handleGameStart} onExit={handleExit} />
+                <JoinLobby userName={userName} onGameStart={handleGameStart} onExit={handleExit} />
             )}
             {screen === 'game' && (
                 <GameScreen userName={userName} gameData={gameData} onExit={handleExit} />

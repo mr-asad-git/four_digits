@@ -6,16 +6,27 @@ import DigitPicker from './DigitPicker'
 const CLOUD_WIDTHS = Array.from({ length: 16 }, (_, i) => 380 + (i * 41) % 320)
 const LAST_ROOM_KEY = 'fourdigits_last_room'
 
-const JoinLobby = ({ userName, rejoinCode, onGameStart, onExit }) => {
+const JoinLobby = ({ userName, onGameStart, onExit }) => {
     const socketRef = useRef(null)
     const transitioningRef = useRef(false)
-    const roomCodeRef = useRef(rejoinCode || '')
+    const roomCodeRef = useRef('')
     // Keep latest join handler in a ref so the socket 'connect' closure can call it
     const joinHandlerRef = useRef(null)
 
     const [isRevealing, setIsRevealing] = useState(true)
     const [phase, setPhase] = useState('discover') // 'discover' | 'lobby'
-    const [roomCode, setRoomCode] = useState(rejoinCode || '')
+    const [roomCode, setRoomCode] = useState('')
+    const [lastRoom, setLastRoom] = useState(null)
+
+    // Load last room on mount
+    useEffect(() => {
+        try {
+            const stored = localStorage.getItem(LAST_ROOM_KEY)
+            if (stored) setLastRoom(JSON.parse(stored))
+        } catch (_) {
+            localStorage.removeItem(LAST_ROOM_KEY)
+        }
+    }, [])
     const [availableRooms, setAvailableRooms] = useState([])
     const [players, setPlayers] = useState([])
     const [error, setError] = useState('')
@@ -141,10 +152,6 @@ const JoinLobby = ({ userName, rejoinCode, onGameStart, onExit }) => {
         socket.on('connect', () => {
             setError('')
             fetchRooms(socket)
-            // Auto-join if a rejoin code was passed in
-            if (rejoinCode) {
-                joinHandlerRef.current(socket, rejoinCode, undefined, [])
-            }
         })
 
         socket.on('connect_error', () => {
@@ -264,6 +271,35 @@ const JoinLobby = ({ userName, rejoinCode, onGameStart, onExit }) => {
                 {phase === 'discover' ? (
                     /* ══ DISCOVER PHASE ══ */
                     <div className="bg-white/90 backdrop-blur-sm rounded-3xl p-6 shadow-2xl border-b-8 border-green-700/30 flex flex-col gap-5">
+
+                        {/* Rejoin banner */}
+                        {lastRoom && (
+                            <div className="bg-amber-50 border-2 border-amber-200 rounded-2xl px-4 py-3 flex items-center justify-between gap-3">
+                                <div className="min-w-0">
+                                    <p className="text-amber-600 bungee-font text-[10px] tracking-widest">LAST ROOM</p>
+                                    <p className="text-amber-800 bungee-font text-lg tracking-widest truncate">{lastRoom.roomCode}</p>
+                                </div>
+                                <div className="flex gap-2 flex-shrink-0">
+                                    <button
+                                        onClick={() => handleJoinRoom(lastRoom.roomCode)}
+                                        disabled={connecting}
+                                        className="px-3 py-2 rounded-xl bg-amber-400 hover:bg-amber-500 text-white bungee-font text-xs shadow-[0_3px_0_0_#d97706] active:shadow-none active:translate-y-0.5 transition-all disabled:opacity-50"
+                                    >
+                                        🔁 REJOIN
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            localStorage.removeItem(LAST_ROOM_KEY)
+                                            setLastRoom(null)
+                                        }}
+                                        className="w-8 h-8 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-400 text-sm flex items-center justify-center transition-all"
+                                        title="Dismiss"
+                                    >
+                                        ✕
+                                    </button>
+                                </div>
+                            </div>
+                        )}
 
                         {/* Room List */}
                         <div>

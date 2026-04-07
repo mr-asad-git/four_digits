@@ -8,17 +8,6 @@ const IntScreen = ({ onStart }) => {
     const [name, setName] = useState(() => localStorage.getItem(SAVED_NAME_KEY) || '')
     const [isTransitioning, setIsTransitioning] = useState(false)
     const [pendingAction, setPendingAction] = useState(null)
-    const [lastRoom, setLastRoom] = useState(null)
-
-    // Load last room on mount
-    useEffect(() => {
-        try {
-            const stored = localStorage.getItem(LAST_ROOM_KEY)
-            if (stored) setLastRoom(JSON.parse(stored))
-        } catch (_) {
-            localStorage.removeItem(LAST_ROOM_KEY)
-        }
-    }, [])
 
     // Persist name whenever it changes
     const handleNameChange = (e) => {
@@ -34,18 +23,6 @@ const IntScreen = ({ onStart }) => {
         setIsTransitioning(true)
         setTimeout(() => {
             onStart(name.trim(), action)
-        }, 1300)
-    }
-
-    const handleRejoin = () => {
-        if (!lastRoom) return
-        const playerName = name.trim() || lastRoom.playerName
-        if (!playerName) return
-        localStorage.setItem(SAVED_NAME_KEY, playerName)
-        setIsTransitioning(true)
-        setTimeout(() => {
-            // Navigate to JoinLobby with the saved room code pre-filled
-            onStart(playerName, 'join', lastRoom.roomCode)
         }, 1300)
     }
 
@@ -90,35 +67,6 @@ const IntScreen = ({ onStart }) => {
                             autoComplete="off"
                         />
                     </div>
-
-                    {/* Rejoin banner */}
-                    {lastRoom && (
-                        <div className="bg-amber-50 border-2 border-amber-200 rounded-2xl px-4 py-3 flex items-center justify-between gap-3">
-                            <div className="min-w-0">
-                                <p className="text-amber-600 bungee-font text-[10px] tracking-widest">LAST ROOM</p>
-                                <p className="text-amber-800 bungee-font text-lg tracking-widest truncate">{lastRoom.roomCode}</p>
-                            </div>
-                            <div className="flex gap-2 flex-shrink-0">
-                                <button
-                                    onClick={handleRejoin}
-                                    disabled={isTransitioning || !name.trim()}
-                                    className="px-3 py-2 rounded-xl bg-amber-400 hover:bg-amber-500 text-white bungee-font text-xs shadow-[0_3px_0_0_#d97706] active:shadow-none active:translate-y-0.5 transition-all disabled:opacity-50"
-                                >
-                                    🔁 REJOIN
-                                </button>
-                                <button
-                                    onClick={() => {
-                                        localStorage.removeItem(LAST_ROOM_KEY)
-                                        setLastRoom(null)
-                                    }}
-                                    className="w-8 h-8 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-400 text-sm flex items-center justify-center transition-all"
-                                    title="Dismiss"
-                                >
-                                    ✕
-                                </button>
-                            </div>
-                        </div>
-                    )}
 
                     {/* Create Game */}
                     <button
