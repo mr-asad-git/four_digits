@@ -193,7 +193,7 @@ const PlayerInfoCard = ({ player, isTarget, isEliminated, isMe, submittedIds, re
 }
 
 // ── Right Panel: Guess Feed Entry ────────────────────────────────
-const GuessFeedEntry = ({ entry }) => {
+const GuessFeedEntry = ({ entry, hideTargetName }) => {
     return (
         <div className="bg-white/12 backdrop-blur-sm rounded-2xl p-3 border border-white/20 flex flex-col gap-2">
             {/* Header */}
@@ -207,11 +207,15 @@ const GuessFeedEntry = ({ entry }) => {
                 <span className="text-white/40 bungee-font text-[9px] flex-shrink-0">R{entry.round}</span>
             </div>
 
-            {/* Arrow + target */}
-            <div className="flex items-center gap-1.5">
-                <span className="text-white/30 text-xs">▸</span>
-                <span className="text-white/60 bungee-font text-[10px] truncate">guessed {entry.targetName}</span>
-            </div>
+            {/* Arrow + target (Hide if we are already viewing this target's timeline to avoid redundancy) */}
+            {!hideTargetName && (
+                <div className="flex items-center gap-1.5">
+                    <span className="text-white/30 text-xs">▸</span>
+                    <span className="text-white/60 bungee-font text-[10px] truncate">
+                        guessed {entry.targetName}
+                    </span>
+                </div>
+            )}
 
             {/* Digits */}
             <div className="flex gap-1.5 flex-wrap">
@@ -412,6 +416,7 @@ const GameScreen = ({ userName, gameData, onExit }) => {
             return {
                 guesserId: guesserSocketId,
                 guesserName,
+                targetId: entry.targetId,
                 targetName: targetPlayer?.name || 'Unknown',
                 guess: entry.guess,
                 result: entry.result,
@@ -459,12 +464,6 @@ const GameScreen = ({ userName, gameData, onExit }) => {
     )
 
     const GuessLogPanel = () => {
-        const filteredFeed = guessLogTab === 'all'
-            ? guessFeed
-            : guessFeed.filter(g => g.guesserId === guessLogTab)
-
-        const feedSlice = filteredFeed.slice(0, 20).reverse()
-
         return (
             <div className="flex flex-col px-3 py-3 h-full">
                 {/* Tabs */}
@@ -472,8 +471,8 @@ const GameScreen = ({ userName, gameData, onExit }) => {
                     <button
                         onClick={() => setGuessLogTab('all')}
                         className={`flex-shrink-0 px-3 py-1.5 rounded-lg bungee-font text-[10px] transition-all border-2 ${guessLogTab === 'all'
-                                ? 'bg-white/20 border-white/40 text-white shadow-sm'
-                                : 'bg-black/20 border-black/10 text-white/50 hover:bg-black/30'
+                            ? 'bg-white/20 border-white/40 text-white shadow-sm'
+                            : 'bg-black/20 border-black/10 text-white/50 hover:bg-black/30'
                             }`}
                     >
                         ALL
@@ -483,8 +482,8 @@ const GameScreen = ({ userName, gameData, onExit }) => {
                             key={p.id}
                             onClick={() => setGuessLogTab(p.id)}
                             className={`flex-shrink-0 px-3 py-1.5 rounded-lg bungee-font text-[10px] transition-all border-2 ${guessLogTab === p.id
-                                    ? 'bg-white/20 border-white/40 text-white shadow-sm'
-                                    : 'bg-black/20 border-black/10 text-white/50 hover:bg-black/30'
+                                ? 'bg-white/20 border-white/40 text-white shadow-sm'
+                                : 'bg-black/20 border-black/10 text-white/50 hover:bg-black/30'
                                 }`}
                         >
                             {p.name.length > 8 ? p.name.slice(0, 8) + '...' : p.name}
@@ -492,22 +491,33 @@ const GameScreen = ({ userName, gameData, onExit }) => {
                     ))}
                 </div>
 
-                <div className="flex flex-col gap-2 flex-1 overflow-y-auto hide-scroll pr-1">
-                    <p className="bungee-font text-white/40 text-[9px] tracking-widest px-0.5">
-                        {guessLogTab === 'all' ? 'GUESS LOG' : 'THEIR GUESSES'} · {filteredFeed.length}{filteredFeed.length > 20 ? ' (latest 20)' : ''}
-                    </p>
-                    {feedSlice.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center gap-2 py-5">
-                            <p className="text-3xl opacity-30">🎯</p>
-                            <p className="text-white/30 bungee-font text-xs text-center leading-relaxed">
-                                No guesses yet.<br />They'll appear here.
-                            </p>
-                        </div>
-                    ) : (
-                        feedSlice.map((entry, i) => (
-                            <GuessFeedEntry key={`feed-${i}`} entry={entry} />
-                        ))
-                    )}
+                <div className="flex flex-col gap-4 flex-1 overflow-y-auto hide-scroll pr-1 pb-10">
+                    {gamePlayers.map(targetPlayer => {
+                        if (guessLogTab !== 'all' && guessLogTab !== targetPlayer.id) return null;
+
+                        const targetGuesses = guessFeed.filter(g => g.targetId === targetPlayer.id);
+
+                        return (
+                            <div key={targetPlayer.id} className="bg-black/20 rounded-2xl border border-white/10 p-2.5 shadow-inner">
+                                <div className="text-center mb-2">
+                                    <span className="bungee-font text-yellow-300 text-xs tracking-wider bg-black/30 px-3 py-1 rounded-full">
+                                        TARGET: {targetPlayer.name}
+                                    </span>
+                                </div>
+
+                                {targetGuesses.length === 0 ? (
+                                    <p className="text-white/30 bungee-font text-[9px] text-center py-4">NO GUESSES YET</p>
+                                ) : (
+                                    <div className="flex flex-col gap-2">
+                                        {/* Show only the latest 15 guesses for this target */}
+                                        {targetGuesses.slice(0, 15).map((entry, i) => (
+                                            <GuessFeedEntry key={`tg-${targetPlayer.id}-${i}`} entry={entry} hideTargetName={true} />
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )
+                    })}
                 </div>
             </div>
         )
@@ -567,36 +577,14 @@ const GameScreen = ({ userName, gameData, onExit }) => {
                 <div className="flex items-center gap-2">
                     {gameData?.roomCode && (
                         <div className="flex items-center gap-1.5 bg-black/20 backdrop-blur-sm rounded-full px-3 py-1.5">
-                            <span className="text-white/50 bungee-font text-[9px] tracking-widest">ROOM</span>
-                            <span className="text-white bungee-font text-sm tracking-widest">{gameData.roomCode}</span>
+                            <span className="text-white/50 bungee-font text-[25px] tracking-widest">ROOM</span>
+                            <span className="text-white bungee-font text-lg tracking-widest">{gameData.roomCode}</span>
                         </div>
                     )}
-                    {/* Mobile players toggle — left side */}
-                    <button
-                        onClick={() => setMobilePanel(p => p === 'players' ? null : 'players')}
-                        className={`
-                            md:hidden flex items-center gap-1.5 rounded-xl px-3 py-2 bungee-font text-xs
-                            border-2 transition-all active:scale-95
-                            ${mobilePanel === 'players'
-                                ? 'bg-white text-green-700 border-white shadow-lg'
-                                : 'bg-white/20 text-white border-white/30 hover:bg-white/30'}
-                        `}
-                    >
-                        <span className="text-sm">👥</span>
-                        <span>{gamePlayers.length}</span>
-                    </button>
                 </div>
 
-                {/* Center: round info */}
+                {/* Center: round info (simplified/removed from top bar to move above timer) */}
                 <div className="flex-1 text-center pointer-events-none">
-                    {phase === 'guessing' && (
-                        <>
-                            <p className="text-white/50 bungee-font text-[9px] tracking-widest leading-none">ROUND {roundNumber}</p>
-                            <p className="text-white bungee-font text-xs sm:text-sm leading-snug">
-                                TARGET: <span className="text-yellow-300">{currentTargetName}</span>
-                            </p>
-                        </>
-                    )}
                     {phase === 'waiting' && (
                         <p className="text-white/70 bungee-font text-xs sm:text-sm">⏳ STARTING...</p>
                     )}
@@ -607,23 +595,9 @@ const GameScreen = ({ userName, gameData, onExit }) => {
 
                 {/* Right: exit + mobile guess log toggle */}
                 <div className="flex items-center gap-2">
-                    {/* Mobile guess log toggle — right side */}
-                    <button
-                        onClick={() => setMobilePanel(p => p === 'guesses' ? null : 'guesses')}
-                        className={`
-                            md:hidden flex items-center gap-1.5 rounded-xl px-3 py-2 bungee-font text-xs
-                            border-2 transition-all active:scale-95
-                            ${mobilePanel === 'guesses'
-                                ? 'bg-white text-green-700 border-white shadow-lg'
-                                : 'bg-white/20 text-white border-white/30 hover:bg-white/30'}
-                        `}
-                    >
-                        <span className="text-sm">📋</span>
-                        <span>{guessFeed.length}</span>
-                    </button>
                     <button
                         onClick={() => setExitConfirm(true)}
-                        className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-white/20 hover:bg-red-400/80 border-2 border-white/30 text-white bungee-font text-sm transition-all flex items-center justify-center"
+                        className="w-15 h-15 sm:w-10 sm:h-10 rounded-full bg-white/20 hover:bg-red-400/80 border-2 border-white/30 text-white bungee-font text-2xl transition-all flex items-center justify-center mx-4 my-2"
                     >✕</button>
                 </div>
             </div>
@@ -648,6 +622,26 @@ const GameScreen = ({ userName, gameData, onExit }) => {
             {phase !== 'gameover' && (
                 <div className={`flex-1 relative overflow-hidden z-10 transition-all duration-700 delay-500 ${isRevealing ? 'opacity-0' : 'opacity-100'}`}>
 
+                    {/* ══ MOBILE FAB ARROWS ══ */}
+                    <div className="md:hidden absolute left-[15%] bottom-24 z-20 pointer-events-none">
+                        <button
+                            onClick={() => setMobilePanel('players')}
+                            className={`pointer-events-auto w-34 h-34 bg-white/10 backdrop-blur-lg text-white rounded-full border border-white/30 flex items-center justify-center shadow-2xl transition-all duration-300 focus:outline-none active:scale-90 ${mobilePanel === 'players' ? 'scale-0 opacity-0' : 'scale-100 opacity-100 hover:bg-white/20'}`}
+                            title="Players"
+                        >
+                            <span className="text-6xl">👥</span>
+                        </button>
+                    </div>
+                    <div className="md:hidden absolute right-[15%] bottom-24 z-20 pointer-events-none">
+                        <button
+                            onClick={() => setMobilePanel('guesses')}
+                            className={`pointer-events-auto w-34 h-34 bg-white/10 backdrop-blur-lg text-white rounded-full border border-white/30 flex items-center justify-center shadow-2xl transition-all duration-300 focus:outline-none active:scale-90 ${mobilePanel === 'guesses' ? 'scale-0 opacity-0' : 'scale-100 opacity-100 hover:bg-white/20'}`}
+                            title="Guesses"
+                        >
+                            <span className="text-6xl">📋</span>
+                        </button>
+                    </div>
+
                     {/* ══ LEFT: Players Panel — absolute, floats over center ══ */}
                     <div className="hidden md:block absolute left-3 lg:left-4 top-2 z-20 w-[220px] lg:w-[320px] max-h-[calc(100vh-80px)] overflow-y-auto hide-scroll bg-black/25 backdrop-blur-md rounded-2xl border border-white/20 shadow-2xl">
                         <PlayersPanel onHistoryOpen={setHistoryPlayerId} />
@@ -656,12 +650,25 @@ const GameScreen = ({ userName, gameData, onExit }) => {
                     {/* ══ CENTER: Game Controls — full width, panels overlap it ══ */}
                     <div className="w-full h-full flex flex-col items-center justify-center gap-3 sm:gap-4 px-3 sm:px-5 py-3 overflow-y-auto hide-scroll">
 
-                        {/* Timer */}
+                        {/* Enhanced Round/Target + Timer */}
                         {phase === 'guessing' && expiresAt && (
-                            <div className="w-full max-w-sm">
+                            <div className="w-full max-w-sm flex flex-col items-center mb-2">
+                                {/* Enhanced Target Display */}
+                                <div className="flex flex-col items-center gap-1.5 mb-4 w-full">
+                                    <div className="px-4 mb-5 py-1.5 rounded-full bg-black/20 border border-white/20 backdrop-blur-md shadow-inner">
+                                        <p className="text-white/80 bungee-font text-[20px] tracking-widest leading-none">ROUND {roundNumber}</p>
+                                    </div>
+                                    <div className="bg-white/10 backdrop-blur-md border-[3px] border-yellow-300/50 rounded-2xl px-6 py-3 shadow-[0_0_20px_rgba(253,224,71,0.2)] w-full text-center relative overflow-hidden">
+                                        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent animate-shimmer" />
+                                        <h2 className="text-white/80 bungee-font text-sm uppercase tracking-wider mb-0.5">CURRENT TARGET</h2>
+                                        <p className="text-yellow-300 bungee-font text-3xl sm:text-4xl drop-shadow-md truncate">
+                                            {currentTargetName}
+                                        </p>
+                                    </div>
+                                </div>
                                 <TimerBar expiresAt={expiresAt} />
-                                <p className="text-white/40 bungee-font text-[9px] text-center mt-1">
-                                    {submittedIds.length}/{totalGuessers} submitted
+                                <p className="text-white/40 bungee-font text-[9px] text-center mt-2.5 bg-black/20 px-3 py-1 rounded-full">
+                                    {submittedIds.length}/{totalGuessers} SUBMITTED
                                 </p>
                             </div>
                         )}
