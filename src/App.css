@@ -15,35 +15,23 @@
   100% { transform: translateY(0px) translateX(0px); }
 }
 
-@keyframes rise {
-  0% { transform: translateY(120vh); }
-  100% { transform: translateY(-120vh); }
+.cloud-free-agent {
+  animation: individual-cloud-rise 3.0s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+@keyframes individual-cloud-rise {
+  0% { transform: translate(-50%, calc(var(--stop-y) + var(--enter-dist))) scale(var(--scale)); }
+  35% { transform: translate(-50%, var(--stop-y)) scale(var(--scale)); }
+  60% { transform: translate(-50%, calc(var(--stop-y) - 5vh)) scale(var(--scale)); }
+  100% { transform: translate(-50%, calc(var(--stop-y) - var(--exit-dist))) scale(var(--scale)); }
 }
 
 .animate-float {
   animation: float 6s ease-in-out infinite;
 }
 
-.animate-rise {
-  animation: rise 2.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
-}
-
-.cloud-transition-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  pointer-events: none;
-  z-index: 100;
-  overflow: visible;
-}
-
-.transition-cloud {
-  position: absolute;
-  bottom: 0;
-  left: 50%;
-  transform: translateX(-50%) translateY(120vh);
+html, body {
+  overflow-x: hidden;
 }
 
 /* Hide scrollbar cross-browser — used on player card rows in GameScreen */

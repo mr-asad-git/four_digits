@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react'
 import Cloud from '../components/Cloud'
 
-const CLOUD_WIDTHS = Array.from({ length: 16 }, (_, i) => 380 + (i * 41) % 320)
 
 // ── Colour helpers ───────────────────────────────────────────────
 const RESULT_COLORS = {
@@ -225,7 +224,6 @@ const GameScreen = ({ userName, gameData, onExit }) => {
 
     // ── Game state ───────────────────────────────────────────────
     const [allPlayers, setAllPlayers] = useState(gameData?.players || [])
-    const [isRevealing, setIsRevealing] = useState(true)
     const [phase, setPhase] = useState('waiting') // 'waiting' | 'guessing' | 'results' | 'gameover'
     const [currentTargetId, setCurrentTargetId] = useState(null)
     const [currentTargetName, setCurrentTargetName] = useState('')
@@ -249,12 +247,6 @@ const GameScreen = ({ userName, gameData, onExit }) => {
         onExit()
     }
     const [historyPlayerId, setHistoryPlayerId] = useState(null) // Which player's history to show
-
-    // ── Cloud reveal ─────────────────────────────────────────────
-    useEffect(() => {
-        const t = setTimeout(() => setIsRevealing(false), 3000)
-        return () => clearTimeout(t)
-    }, [])
 
     // ── Socket listeners ─────────────────────────────────────────
     useEffect(() => {
@@ -314,7 +306,7 @@ const GameScreen = ({ userName, gameData, onExit }) => {
             setActivePlayers(ap || [])
             setSubmittedIds(si || [])
             if (dc) setDigitCount(dc)
-            if (p === 'guessing') { setPhase('guessing'); setIsRevealing(false) }
+            if (p === 'guessing') { setPhase('guessing') }
         })
 
         return () => {
@@ -380,23 +372,6 @@ const GameScreen = ({ userName, gameData, onExit }) => {
                 />
             )}
 
-            {/* Reveal Clouds */}
-            {isRevealing && (
-                <div className="cloud-transition-overlay">
-                    {CLOUD_WIDTHS.map((w, i) => (
-                        <div key={`cloud-${i}`} className="transition-cloud animate-rise"
-                            style={{
-                                left: `${(i % 4) * 28 - 10}%`,
-                                bottom: `-${Math.floor(i / 4) * 28 + 10}vh`,
-                                animationDelay: `${(i % 4) * 0.08 + Math.floor(i / 4) * 0.18 - 1.2}s`,
-                                width: `${w}px`, zIndex: 100 + i
-                            }}>
-                            <Cloud width="100%" />
-                        </div>
-                    ))}
-                </div>
-            )}
-
             {/* Exit confirm */}
             {exitConfirm && (
                 <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center">
@@ -416,7 +391,7 @@ const GameScreen = ({ userName, gameData, onExit }) => {
 
             {/* Room code badge — top-left */}
             {gameData?.roomCode && (
-                <div className={`absolute top-4 left-4 z-10 flex items-center gap-1.5 bg-black/20 backdrop-blur-sm rounded-full px-3 py-1.5 transition-all ${isRevealing ? 'opacity-0' : 'opacity-100'}`}>
+                <div className={`absolute top-4 left-4 z-10 flex items-center gap-1.5 bg-black/20 backdrop-blur-sm rounded-full px-3 py-1.5 transition-all`}>
                     <span className="text-white/60 bungee-font text-[9px] tracking-widest">ROOM</span>
                     <span className="text-white bungee-font text-sm tracking-widest">{gameData.roomCode}</span>
                 </div>
@@ -424,7 +399,7 @@ const GameScreen = ({ userName, gameData, onExit }) => {
 
             {/* Exit button */}
             <button onClick={() => setExitConfirm(true)}
-                className={`absolute top-4 right-4 w-10 h-10 rounded-full bg-white/20 hover:bg-red-400/80 border-2 border-white/30 text-white bungee-font text-sm transition-all z-10 ${isRevealing ? 'opacity-0' : 'opacity-100'}`}>
+                className={`absolute top-4 right-4 w-10 h-10 rounded-full bg-white/20 hover:bg-red-400/80 border-2 border-white/30 text-white bungee-font text-sm transition-all z-10`}>
                 ✕
             </button>
 
@@ -447,7 +422,7 @@ const GameScreen = ({ userName, gameData, onExit }) => {
 
             {/* ══ MAIN GAME LAYOUT ══ */}
             {phase !== 'gameover' && (
-                <div className={`flex-1 flex flex-col xl:flex-row gap-4 xl:gap-8 p-3 md:p-6 md:pt-16 xl:px-10 overflow-hidden transition-all duration-700 delay-500 z-10 ${isRevealing ? 'opacity-0' : 'opacity-100'}`}>
+                <div className={`flex-1 flex flex-col xl:flex-row gap-4 xl:gap-8 p-3 md:p-6 md:pt-16 xl:px-10 overflow-hidden transition-all duration-700 delay-500 z-10`}>
 
                     {/* ── LEFT PLAYERS (Top on Mobile) ── */}
                     <div className="flex flex-row xl:flex-col gap-3 md:gap-4 w-full xl:w-[350px] flex-shrink-0 overflow-x-auto xl:overflow-y-auto no-scrollbar md:pb-0 hide-scroll items-center xl:items-end px-2 md:px-0 pt-2 md:pt-0">

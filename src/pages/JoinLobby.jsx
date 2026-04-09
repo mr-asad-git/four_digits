@@ -3,7 +3,6 @@ import { io } from 'socket.io-client'
 import Cloud from '../components/Cloud'
 import DigitPicker from './DigitPicker'
 
-const CLOUD_WIDTHS = Array.from({ length: 16 }, (_, i) => 380 + (i * 41) % 320)
 const LAST_ROOM_KEY = 'fourdigits_last_room'
 
 const JoinLobby = ({ userName, onGameStart, onExit }) => {
@@ -13,7 +12,6 @@ const JoinLobby = ({ userName, onGameStart, onExit }) => {
     // Keep latest join handler in a ref so the socket 'connect' closure can call it
     const joinHandlerRef = useRef(null)
 
-    const [isRevealing, setIsRevealing] = useState(true)
     const [phase, setPhase] = useState('discover') // 'discover' | 'lobby'
     const [roomCode, setRoomCode] = useState('')
     const [lastRoom, setLastRoom] = useState(null)
@@ -145,7 +143,6 @@ const JoinLobby = ({ userName, onGameStart, onExit }) => {
 
     // Socket setup — runs once on mount
     useEffect(() => {
-        const revealTimer = setTimeout(() => setIsRevealing(false), 2500)
         const socket = io({ timeout: 6000, extraHeaders: { 'ngrok-skip-browser-warning': 'true' } })
         socketRef.current = socket
 
@@ -160,7 +157,6 @@ const JoinLobby = ({ userName, onGameStart, onExit }) => {
         })
 
         return () => {
-            clearTimeout(revealTimer)
             if (!transitioningRef.current) socket.disconnect()
         }
     }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -225,23 +221,6 @@ const JoinLobby = ({ userName, onGameStart, onExit }) => {
                 </div>
             )}
 
-            {/* Reveal Clouds */}
-            {isRevealing && (
-                <div className="cloud-transition-overlay">
-                    {CLOUD_WIDTHS.map((w, i) => (
-                        <div key={`cloud-${i}`} className="transition-cloud animate-rise"
-                            style={{
-                                left: `${(i % 4) * 28 - 10}%`,
-                                bottom: `-${Math.floor(i / 4) * 28 + 10}vh`,
-                                animationDelay: `${(i % 4) * 0.08 + Math.floor(i / 4) * 0.18 - 1.2}s`,
-                                width: `${w}px`, zIndex: 100 + i
-                            }}>
-                            <Cloud width="100%" />
-                        </div>
-                    ))}
-                </div>
-            )}
-
             {/* BG Clouds */}
             <div className="absolute top-10 right-10 animate-float opacity-30 pointer-events-none">
                 <Cloud width={280} height={140} />
@@ -258,7 +237,7 @@ const JoinLobby = ({ userName, onGameStart, onExit }) => {
                 </div>
             )}
 
-            <div className={`w-full max-w-xl flex flex-col gap-5 transition-all duration-700 delay-300 ${isRevealing ? 'opacity-0 translate-y-8' : 'opacity-100 translate-y-0'}`}>
+            <div className={`w-full max-w-xl flex flex-col gap-5 transition-all duration-700 delay-300`}>
 
                 {/* Header */}
                 <div className="text-center">

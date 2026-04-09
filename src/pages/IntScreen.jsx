@@ -20,10 +20,7 @@ const IntScreen = ({ onStart }) => {
         if (!name.trim()) return
         localStorage.setItem(SAVED_NAME_KEY, name.trim())
         setPendingAction(action)
-        setIsTransitioning(true)
-        setTimeout(() => {
-            onStart(name.trim(), action)
-        }, 1300)
+        onStart(name.trim(), action)
     }
 
     const cloudsArr = Array.from({ length: 16 })
@@ -45,8 +42,7 @@ const IntScreen = ({ onStart }) => {
                 <Cloud width={220} height={110} />
             </div>
 
-            {/* Card */}
-            <div className={`relative flex flex-col items-center transition-all duration-700 ${isTransitioning ? 'opacity-0 scale-90 -translate-y-8' : 'opacity-100 scale-100 translate-y-0'}`}>
+            <div className={`relative flex flex-col items-center transition-all duration-700`}>
                 <h1 className='bungee-font text-white drop-shadow-2xl mb-2' style={{ fontSize: 'clamp(60px, 10vw, 100px)', lineHeight: 1 }}>
                     4 DIGITS
                 </h1>
@@ -71,7 +67,7 @@ const IntScreen = ({ onStart }) => {
                     {/* Create Game */}
                     <button
                         onClick={() => handleAction('create')}
-                        disabled={isTransitioning || !name.trim()}
+                        disabled={!name.trim()}
                         className='w-full py-5 rounded-2xl cursor-pointer bg-[#FFC107] hover:bg-[#FFB300] active:bg-[#FFA000] text-[#5D4037] bungee-font text-2xl shadow-[0_6px_0_0_#FFA000] active:shadow-none active:translate-y-1.5 transition-all disabled:opacity-50'
                     >
                         🎮 CREATE GAME
@@ -87,7 +83,7 @@ const IntScreen = ({ onStart }) => {
                     {/* Join Game */}
                     <button
                         onClick={() => handleAction('join')}
-                        disabled={isTransitioning || !name.trim()}
+                        disabled={!name.trim()}
                         className='w-full py-5 rounded-2xl cursor-pointer bg-white hover:bg-green-50 active:bg-green-100 text-green-700 bungee-font text-2xl border-4 border-green-200 shadow-[0_6px_0_0_#a7d7a7] active:shadow-none active:translate-y-1.5 transition-all disabled:opacity-50'
                     >
                         🔗 FIND ROOM
@@ -95,26 +91,6 @@ const IntScreen = ({ onStart }) => {
                 </div>
             </div>
 
-            {/* Transition Overlay */}
-            {isTransitioning && (
-                <div className="cloud-transition-overlay">
-                    {cloudsArr.map((_, i) => (
-                        <div
-                            key={`cloud-${i}`}
-                            className="transition-cloud animate-rise"
-                            style={{
-                                left: `${(i % 4) * 28 - 10}%`,
-                                bottom: `-${Math.floor(i / 4) * 28 + 20}vh`,
-                                animationDelay: `${(i % 4) * 0.08 + Math.floor(i / 4) * 0.18}s`,
-                                width: `${380 + (i * 37) % 300}px`,
-                                zIndex: 100 + i,
-                            }}
-                        >
-                            <Cloud width="100%" />
-                        </div>
-                    ))}
-                </div>
-            )}
         </div>
     )
 }

@@ -3,14 +3,12 @@ import { io } from 'socket.io-client'
 import Cloud from '../components/Cloud'
 import DigitPicker from './DigitPicker'
 
-const CLOUD_WIDTHS = Array.from({ length: 16 }, (_, i) => 380 + (i * 41) % 320)
 const LAST_ROOM_KEY = 'fourdigits_last_room'
 
 const HostLobby = ({ userName, onGameStart, onExit }) => {
     const socketRef = useRef(null)
     const transitioningRef = useRef(false)
     const roomCodeRef = useRef('')
-    const [isRevealing, setIsRevealing] = useState(true)
     const [roomCode, setRoomCode] = useState('')
     const [serverIP, setServerIP] = useState('...')
     const [players, setPlayers] = useState([])
@@ -26,7 +24,6 @@ const HostLobby = ({ userName, onGameStart, onExit }) => {
     const [showSettings, setShowSettings] = useState(false)
 
     useEffect(() => {
-        const revealTimer = setTimeout(() => setIsRevealing(false), 2500)
         const socket = io({ extraHeaders: { 'ngrok-skip-browser-warning': 'true' } })
         socketRef.current = socket
 
@@ -70,7 +67,6 @@ const HostLobby = ({ userName, onGameStart, onExit }) => {
         })
 
         return () => {
-            clearTimeout(revealTimer)
             if (!transitioningRef.current) socket.disconnect()
         }
     }, [])
@@ -192,23 +188,6 @@ const HostLobby = ({ userName, onGameStart, onExit }) => {
                 </div>
             )}
 
-            {/* Reveal Clouds */}
-            {isRevealing && (
-                <div className="cloud-transition-overlay">
-                    {CLOUD_WIDTHS.map((w, i) => (
-                        <div key={`cloud-${i}`} className="transition-cloud animate-rise"
-                            style={{
-                                left: `${(i % 4) * 28 - 10}%`,
-                                bottom: `-${Math.floor(i / 4) * 28 + 10}vh`,
-                                animationDelay: `${(i % 4) * 0.08 + Math.floor(i / 4) * 0.18 - 1.2}s`,
-                                width: `${w}px`, zIndex: 100 + i
-                            }}>
-                            <Cloud width="100%" />
-                        </div>
-                    ))}
-                </div>
-            )}
-
             {/* Background Clouds */}
             <div className="absolute top-10 left-10 animate-float opacity-30 pointer-events-none">
                 <Cloud width={280} height={140} />
@@ -224,7 +203,7 @@ const HostLobby = ({ userName, onGameStart, onExit }) => {
                 </div>
             )}
 
-            <div className={`w-full max-w-2xl flex flex-col gap-4 transition-all duration-700 delay-300 ${isRevealing ? 'opacity-0 translate-y-8' : 'opacity-100 translate-y-0'}`}>
+            <div className={`w-full max-w-2xl flex flex-col gap-4 transition-all duration-700 delay-300`}>
 
                 {/* Header */}
                 <div className="text-center">
