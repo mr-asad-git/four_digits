@@ -102,7 +102,7 @@ const HistoryModal = ({ player, history, onClose, isMe }) => {
 }
 
 // ── Left Panel: Player Info Card ─────────────────────────────────
-const PlayerInfoCard = ({ player, isTarget, isEliminated, isMe, submittedIds, receivedGuesses = [], onOpenHistory }) => {
+const PlayerInfoCard = ({ player, isTarget, isEliminated, isMe, submittedIds, typingIds, receivedGuesses = [], onOpenHistory }) => {
     const [showCode, setShowCode] = useState(false)
     const isOffline = player.disconnected
     const hasSubmitted = submittedIds.includes(player.id)
@@ -120,11 +120,11 @@ const PlayerInfoCard = ({ player, isTarget, isEliminated, isMe, submittedIds, re
     const avatarText = isTarget ? 'text-green-800' : 'text-white'
 
     return (
-        <div className={`rounded-2xl border-2 p-3 flex flex-col gap-2 transition-all duration-300 ${statusColor}`}>
+        <div className={`rounded-2xl border-2 p-3.5 md:p-3 flex flex-col gap-2 transition-all duration-300 ${statusColor}`}>
             {/* Top row: avatar + name + status */}
             <div className="flex items-center gap-2.5">
                 {/* Avatar */}
-                <div className={`relative w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center bungee-font text-lg ${avatarBg} ${avatarText} ${isTarget ? 'avatar-target-glow' : ''}`}>
+                <div className={`relative w-12 h-12 md:w-10 md:h-10 rounded-full flex-shrink-0 flex items-center justify-center bungee-font text-xl md:text-lg ${avatarBg} ${avatarText} ${isTarget ? 'avatar-target-glow' : ''}`}>
                     {player.name?.[0]?.toUpperCase()}
                     {isMe && <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-yellow-400 rounded-full border-2 border-white/80" />}
                 </div>
@@ -149,18 +149,18 @@ const PlayerInfoCard = ({ player, isTarget, isEliminated, isMe, submittedIds, re
                                     </span>
                                 </div>
                             )}
-                            <p className={`bungee-font text-sm leading-tight truncate ${isEliminated || isOffline ? 'text-white/40 line-through' : 'text-white'}`}>
+                            <p className={`bungee-font text-base md:text-sm leading-tight truncate ${isEliminated || isOffline ? 'text-white/40 line-through' : 'text-white'}`}>
                                 {player.name}
                             </p>
-                            {isMe && <span className="text-yellow-300 text-[9px] bungee-font bg-yellow-300/20 px-1.5 py-0.5 rounded-full flex-shrink-0">YOU</span>}
-                            {isTarget && <span className="text-yellow-900 text-[9px] bungee-font bg-yellow-300 px-1.5 py-0.5 rounded-full flex-shrink-0">TARGET</span>}
-                            {isEliminated && <span className="text-red-300 text-[9px] bungee-font">OUT</span>}
-                            {isOffline && <span className="text-red-300 text-[9px] bungee-font bg-red-500/20 px-1.5 py-0.5 rounded-full flex-shrink-0">OFFLINE</span>}
+                            {isMe && <span className="text-yellow-300 text-[11px] md:text-[9px] bungee-font bg-yellow-300/20 px-1.5 py-0.5 rounded-full flex-shrink-0">YOU</span>}
+                            {isTarget && <span className="text-yellow-900 text-[11px] md:text-[9px] bungee-font bg-yellow-300 px-1.5 py-0.5 rounded-full flex-shrink-0">TARGET</span>}
+                            {isEliminated && <span className="text-red-300 text-[11px] md:text-[9px] bungee-font">OUT</span>}
+                            {isOffline && <span className="text-red-300 text-[11px] md:text-[9px] bungee-font bg-red-500/20 px-1.5 py-0.5 rounded-full flex-shrink-0">OFFLINE</span>}
                         </div>
                         {/* Submitted indicator */}
                         {!isEliminated && !isOffline && !isTarget && (
-                            <p className={`text-[9px] bungee-font mt-0.5 ${hasSubmitted ? 'text-green-300' : 'text-white/30'}`}>
-                                {hasSubmitted ? '✓ SUBMITTED' : '· THINKING...'}
+                            <p className={`text-[11px] md:text-[9px] bungee-font mt-0.5 ${hasSubmitted ? 'text-green-300' : typingIds?.includes(player.id) ? 'text-white animate-pulse' : 'text-white/30'}`}>
+                                {hasSubmitted ? '✓ SUBMITTED' : typingIds?.includes(player.id) ? 'TYPING....' : 'IDLE'}
                             </p>
                         )}
                     </div>
@@ -169,13 +169,13 @@ const PlayerInfoCard = ({ player, isTarget, isEliminated, isMe, submittedIds, re
 
             {/* Latest guess received */}
             {latestGuess && !isEliminated && !isOffline && (
-                <div className="bg-black/15 rounded-xl p-2 flex flex-col gap-1">
-                    <p className="text-white/40 text-[9px] bungee-font tracking-wider">LAST GUESS BY {latestGuess.guesserName}</p>
+                <div className="bg-black/15 rounded-xl p-2.5 md:p-2 flex flex-col gap-1">
+                    <p className="text-white/40 text-[10px] md:text-[9px] bungee-font tracking-wider">LAST GUESS BY {latestGuess.guesserName}</p>
                     <div className="flex gap-1.5">
                         {latestGuess.guess.map((digit, j) => {
                             const c = RESULT_COLORS[latestGuess.result[j]] || RESULT_COLORS.red
                             return (
-                                <div key={`lg-${j}`} className={`w-7 h-7 rounded-lg border-2 flex items-center justify-center bungee-font text-xs shadow-sm ${c.bg} ${c.border} ${c.text}`}>
+                                <div key={`lg-${j}`} className={`w-8 h-8 md:w-7 md:h-7 rounded-lg border-2 flex items-center justify-center bungee-font text-sm md:text-xs shadow-sm ${c.bg} ${c.border} ${c.text}`}>
                                     {digit}
                                 </div>
                             )
@@ -195,16 +195,16 @@ const PlayerInfoCard = ({ player, isTarget, isEliminated, isMe, submittedIds, re
 // ── Right Panel: Guess Feed Entry ────────────────────────────────
 const GuessFeedEntry = ({ entry, hideTargetName }) => {
     return (
-        <div className="bg-white/12 backdrop-blur-sm rounded-2xl p-3 border border-white/20 flex flex-col gap-2">
+        <div className="bg-white/12 backdrop-blur-sm rounded-2xl p-4 md:p-3 border border-white/20 flex flex-col gap-2">
             {/* Header */}
             <div className="flex items-center justify-between gap-1">
-                <div className="flex items-center gap-1.5 min-w-0">
-                    <span className="w-6 h-6 rounded-full bg-green-600 flex items-center justify-center bungee-font text-white text-[11px] flex-shrink-0">
+                <div className="flex items-center gap-2 md:gap-1.5 min-w-0">
+                    <span className="w-8 h-8 md:w-6 md:h-6 rounded-full bg-green-600 flex items-center justify-center bungee-font text-white text-xs md:text-[11px] flex-shrink-0">
                         {entry.guesserName?.[0]?.toUpperCase()}
                     </span>
-                    <span className="bungee-font text-white text-xs truncate">{entry.guesserName}</span>
+                    <span className="bungee-font text-white text-sm md:text-xs truncate">{entry.guesserName}</span>
                 </div>
-                <span className="text-white/40 bungee-font text-[9px] flex-shrink-0">R{entry.round}</span>
+                <span className="text-white/40 bungee-font text-[11px] md:text-[9px] flex-shrink-0">R{entry.round}</span>
             </div>
 
             {/* Arrow + target (Hide if we are already viewing this target's timeline to avoid redundancy) */}
@@ -222,12 +222,12 @@ const GuessFeedEntry = ({ entry, hideTargetName }) => {
                 {entry.guess.map((digit, j) => {
                     const c = RESULT_COLORS[entry.result[j]] || RESULT_COLORS.red
                     return (
-                        <div key={`fd-${j}`} className={`w-8 h-8 rounded-lg border-2 flex items-center justify-center bungee-font text-sm shadow-sm ${c.bg} ${c.border} ${c.text}`}>
+                        <div key={`fd-${j}`} className={`w-10 h-10 md:w-8 md:h-8 rounded-xl md:rounded-lg border-2 flex items-center justify-center bungee-font text-base md:text-sm shadow-sm ${c.bg} ${c.border} ${c.text}`}>
                             {digit}
                         </div>
                     )
                 })}
-                {entry.correct && <span className="ml-1 text-green-300 text-lg">✓</span>}
+                {entry.correct && <span className="ml-1 text-green-300 text-xl md:text-lg">✓</span>}
             </div>
         </div>
     )
@@ -286,6 +286,7 @@ const GameScreen = ({ userName, gameData, onExit }) => {
     const [roundResults, setRoundResults] = useState(null)
     const [winner, setWinner] = useState(null)
     const [submittedIds, setSubmittedIds] = useState([])
+    const [typingIds, setTypingIds] = useState([])
     const [totalGuessers, setTotalGuessers] = useState(0)
 
     const [currentGuess, setCurrentGuess] = useState([])
@@ -321,6 +322,7 @@ const GameScreen = ({ userName, gameData, onExit }) => {
             setSubmitted(false)
             setCurrentGuess([])
             setSubmittedIds([])
+            setTypingIds([])
             setRoundResults(null)
             if (dc) setDigitCount(dc)
             setTotalGuessers(activePlayers.filter(id => id !== targetId).length)
@@ -353,7 +355,11 @@ const GameScreen = ({ userName, gameData, onExit }) => {
             setAllPlayers(players)
         })
 
-        socket.on('game-state-sync', ({ players, phase: p, currentTargetId: tid, currentTargetName: tname, roundNumber: rn, guessHistory: gh, activePlayers: ap, submittedIds: si, digitCount: dc }) => {
+        socket.on('player-typing-update', ({ typingIds: ti }) => {
+            setTypingIds(ti)
+        })
+
+        socket.on('game-state-sync', ({ players, phase: p, currentTargetId: tid, currentTargetName: tname, roundNumber: rn, guessHistory: gh, activePlayers: ap, submittedIds: si, typingIds: ti, digitCount: dc }) => {
             setAllPlayers(players)
             setCurrentTargetId(tid)
             setCurrentTargetName(tname)
@@ -361,6 +367,7 @@ const GameScreen = ({ userName, gameData, onExit }) => {
             setGuessHistory(gh || {})
             setActivePlayers(ap || [])
             setSubmittedIds(si || [])
+            setTypingIds(ti || [])
             if (dc) setDigitCount(dc)
             if (p === 'guessing') { setPhase('guessing'); setIsRevealing(false) }
         })
@@ -372,8 +379,15 @@ const GameScreen = ({ userName, gameData, onExit }) => {
             socket.off('game-over')
             socket.off('player-status-changed')
             socket.off('game-state-sync')
+            socket.off('player-typing-update')
         }
     }, [])
+
+    useEffect(() => {
+        if (!socketRef.current || phase !== 'guessing') return
+        const isTyping = currentGuess.length > 0 && !submitted
+        socketRef.current.emit('set-typing', { isTyping })
+    }, [currentGuess, submitted, phase])
 
     const addDigit = useCallback((n) => {
         if (currentGuess.length >= digitCount || submitted) return
@@ -431,8 +445,8 @@ const GameScreen = ({ userName, gameData, onExit }) => {
 
     // ── Panel components (DRY) ───────────────────────────────────
     const PlayersPanel = ({ onHistoryOpen }) => (
-        <div className="flex flex-col gap-2 px-3 py-3">
-            <p className="bungee-font text-white/40 text-[9px] tracking-widest px-0.5">
+        <div className="flex flex-col gap-2 md:gap-2 px-3 py-3">
+            <p className="bungee-font text-white/40 text-[11px] md:text-[9px] tracking-widest px-0.5">
                 PLAYERS · {gamePlayers.length}
             </p>
             {gamePlayers.map(p => (
@@ -443,6 +457,7 @@ const GameScreen = ({ userName, gameData, onExit }) => {
                     isEliminated={isEliminated(p.id)}
                     isMe={p.id === myId}
                     submittedIds={submittedIds}
+                    typingIds={typingIds}
                     receivedGuesses={receivedGuesses[p.id] || []}
                     onOpenHistory={onHistoryOpen}
                 />
@@ -470,7 +485,7 @@ const GameScreen = ({ userName, gameData, onExit }) => {
                 <div className="flex overflow-x-auto hide-scroll gap-2 mb-3 pb-1 flex-shrink-0" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
                     <button
                         onClick={() => setGuessLogTab('all')}
-                        className={`flex-shrink-0 px-3 py-1.5 rounded-lg bungee-font text-[10px] transition-all border-2 ${guessLogTab === 'all'
+                        className={`flex-shrink-0 px-4 py-2 md:px-3 md:py-1.5 rounded-lg md:rounded-lg bungee-font text-xs md:text-[10px] transition-all border-2 ${guessLogTab === 'all'
                             ? 'bg-white/20 border-white/40 text-white shadow-sm'
                             : 'bg-black/20 border-black/10 text-white/50 hover:bg-black/30'
                             }`}
@@ -481,7 +496,7 @@ const GameScreen = ({ userName, gameData, onExit }) => {
                         <button
                             key={p.id}
                             onClick={() => setGuessLogTab(p.id)}
-                            className={`flex-shrink-0 px-3 py-1.5 rounded-lg bungee-font text-[10px] transition-all border-2 ${guessLogTab === p.id
+                            className={`flex-shrink-0 px-4 py-2 md:px-3 md:py-1.5 rounded-lg md:rounded-lg bungee-font text-xs md:text-[10px] transition-all border-2 ${guessLogTab === p.id
                                 ? 'bg-white/20 border-white/40 text-white shadow-sm'
                                 : 'bg-black/20 border-black/10 text-white/50 hover:bg-black/30'
                                 }`}
@@ -491,24 +506,24 @@ const GameScreen = ({ userName, gameData, onExit }) => {
                     ))}
                 </div>
 
-                <div className="flex flex-col gap-4 flex-1 overflow-y-auto hide-scroll pr-1 pb-10">
+                <div className="flex flex-col gap-4 flex-1 overflow-hidden pr-1 pb-1">
                     {gamePlayers.map(targetPlayer => {
                         if (guessLogTab !== 'all' && guessLogTab !== targetPlayer.id) return null;
 
                         const targetGuesses = guessFeed.filter(g => g.targetId === targetPlayer.id);
 
                         return (
-                            <div key={targetPlayer.id} className="bg-black/20 rounded-2xl border border-white/10 p-2.5 shadow-inner">
-                                <div className="text-center mb-2">
-                                    <span className="bungee-font text-yellow-300 text-xs tracking-wider bg-black/30 px-3 py-1 rounded-full">
+                            <div key={targetPlayer.id} className="bg-black/20 rounded-2xl border border-white/10 p-3 md:p-2.5 shadow-inner flex flex-col flex-1 min-h-[100px] overflow-hidden">
+                                <div className="text-center mb-2 flex-shrink-0">
+                                    <span className="bungee-font text-yellow-300 text-sm md:text-xs tracking-wider bg-black/30 px-3 py-1 rounded-full inline-block">
                                         TARGET: {targetPlayer.name}
                                     </span>
                                 </div>
 
                                 {targetGuesses.length === 0 ? (
-                                    <p className="text-white/30 bungee-font text-[9px] text-center py-4">NO GUESSES YET</p>
+                                    <p className="text-white/30 bungee-font text-[9px] text-center py-4 flex-shrink-0">NO GUESSES YET</p>
                                 ) : (
-                                    <div className="flex flex-col gap-2">
+                                    <div className="flex flex-col gap-2 overflow-y-auto hide-scroll flex-1 pr-1">
                                         {/* Show only the latest 15 guesses for this target */}
                                         {targetGuesses.slice(0, 15).map((entry, i) => (
                                             <GuessFeedEntry key={`tg-${targetPlayer.id}-${i}`} entry={entry} hideTargetName={true} />
@@ -658,13 +673,15 @@ const GameScreen = ({ userName, gameData, onExit }) => {
                                     <div className="px-4 mb-5 py-1.5 rounded-full bg-black/20 border border-white/20 backdrop-blur-md shadow-inner">
                                         <p className="text-white/80 bungee-font text-[20px] tracking-widest leading-none">ROUND {roundNumber}</p>
                                     </div>
-                                    <div className="bg-white/10 backdrop-blur-md border-[3px] border-yellow-300/50 rounded-2xl px-6 py-3 shadow-[0_0_20px_rgba(253,224,71,0.2)] w-full text-center relative overflow-hidden">
-                                        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent animate-shimmer" />
-                                        <h2 className="text-white/80 bungee-font text-sm uppercase tracking-wider mb-0.5">CURRENT TARGET</h2>
-                                        <p className="text-yellow-300 bungee-font text-3xl sm:text-4xl drop-shadow-md truncate">
-                                            {currentTargetName}
-                                        </p>
-                                    </div>
+                                    {!amTarget && !isEliminated(myId) && (
+                                        <div className="bg-white/10 backdrop-blur-md border-[3px] border-yellow-300/50 rounded-2xl px-6 py-3 shadow-[0_0_20px_rgba(253,224,71,0.2)] w-full text-center relative overflow-hidden">
+                                            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent animate-shimmer" />
+                                            <h2 className="text-white/80 bungee-font text-sm uppercase tracking-wider mb-0.5">CURRENT TARGET</h2>
+                                            <p className="text-yellow-300 bungee-font text-3xl sm:text-4xl drop-shadow-md truncate">
+                                                {currentTargetName}
+                                            </p>
+                                        </div>
+                                    )}
                                 </div>
                                 <TimerBar expiresAt={expiresAt} />
                                 <p className="text-white/40 bungee-font text-[9px] text-center mt-2.5 bg-black/20 px-3 py-1 rounded-full">
@@ -719,7 +736,15 @@ const GameScreen = ({ userName, gameData, onExit }) => {
 
                         {/* ── Guess input ── */}
                         {!isSpectator && phase === 'guessing' && (
-                            amTarget ? (
+                            isEliminated(myId) ? (
+                                <div className="bg-red-500/20 backdrop-blur-md rounded-3xl p-6 sm:p-8 text-center border-4 border-red-500/30 shadow-[0_0_30px_rgba(239,68,68,0.2)] w-full max-w-sm mt-2">
+                                    <div className="w-16 h-16 mx-auto bg-red-500/20 rounded-full flex items-center justify-center mb-4">
+                                        <span className="text-3xl">☠️</span>
+                                    </div>
+                                    <p className="text-red-300 bungee-font text-xl sm:text-2xl drop-shadow mb-2 tracking-wide">ELIMINATED</p>
+                                    <p className="text-white/70 bungee-font text-xs sm:text-sm tracking-wider">You are eliminated, please wait...</p>
+                                </div>
+                            ) : amTarget ? (
                                 <div className="bg-white/20 backdrop-blur-md rounded-3xl p-5 sm:p-8 text-center border-4 border-yellow-300 shadow-[0_0_30px_rgba(250,204,21,0.35)] w-full max-w-sm">
                                     <p className="text-yellow-300 bungee-font text-2xl sm:text-3xl drop-shadow mb-1">🎯 YOU'RE THE TARGET!</p>
                                     <p className="text-white bungee-font text-xs sm:text-sm">Others are guessing your code...</p>
@@ -779,15 +804,17 @@ const GameScreen = ({ userName, gameData, onExit }) => {
 
                     {/* ══ MOBILE: Drawer overlay ══ */}
                     {mobilePanel && (
-                        <div className="md:hidden absolute inset-0 z-30 flex" onClick={() => setMobilePanel(null)}>
+                        <div className="md:hidden absolute inset-0 z-30 flex overflow-hidden" onClick={() => setMobilePanel(null)}>
                             {/* Players drawer — slides from left */}
                             {mobilePanel === 'players' && (
                                 <>
                                     <div
-                                        className="w-72 max-w-[80vw] h-full bg-[#3a9c3f]/97 backdrop-blur-md border-r border-white/20 shadow-2xl overflow-y-auto hide-scroll"
+                                        className="w-[85vw] max-w-[340px] h-[100dvh] flex flex-col bg-[#3a9c3f]/97 backdrop-blur-md border-r border-white/20 shadow-2xl"
                                         onClick={e => e.stopPropagation()}
                                     >
-                                        <PlayersPanel onHistoryOpen={(id) => { setHistoryPlayerId(id); setMobilePanel(null) }} />
+                                        <div className="flex-1 overflow-y-auto hide-scroll pb-6">
+                                            <PlayersPanel onHistoryOpen={(id) => { setHistoryPlayerId(id); setMobilePanel(null) }} />
+                                        </div>
                                     </div>
                                     <div className="flex-1" />
                                 </>
@@ -797,10 +824,12 @@ const GameScreen = ({ userName, gameData, onExit }) => {
                                 <>
                                     <div className="flex-1" />
                                     <div
-                                        className="w-80 max-w-[85vw] h-full bg-[#3a9c3f]/97 backdrop-blur-md border-l border-white/20 shadow-2xl overflow-y-auto hide-scroll"
+                                        className="w-[90vw] max-w-[380px] h-[100dvh] flex flex-col bg-[#3a9c3f]/97 backdrop-blur-md border-l border-white/20 shadow-2xl overflow-hidden"
                                         onClick={e => e.stopPropagation()}
                                     >
-                                        <GuessLogPanel />
+                                        <div className="flex-1 overflow-hidden pb-6">
+                                            <GuessLogPanel />
+                                        </div>
                                     </div>
                                 </>
                             )}
