@@ -60,12 +60,16 @@ const HostLobby = ({ userName, onGameStart, onExit }) => {
             // Save room for rejoin
             localStorage.setItem(LAST_ROOM_KEY, JSON.stringify({ roomCode: roomCodeRef.current, playerName: userName }))
             transitioningRef.current = true
+            // Pre-capture round-started to avoid race condition in GameScreen mount
+            let pendingRoundData = null
+            socket.once('round-started', (data) => { pendingRoundData = data })
             setTimeout(() => onGameStart({
                 players,
                 socket,
                 isHost: true,
                 roomCode: roomCodeRef.current,
                 digitCount: dc || 4,
+                pendingRoundData,
             }), 300)
         })
 

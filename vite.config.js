@@ -9,7 +9,7 @@ export default defineConfig({
     allowedHosts: true, // allow any host (like ngrok) to access the dev server
     proxy: {
       '/socket.io': {
-        target: 'http://localhost:4000',
+        target: 'http://localhost:3000',
         ws: true,
         changeOrigin: true,
       },

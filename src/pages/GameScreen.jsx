@@ -38,11 +38,9 @@ const HistoryModal = ({ player, history, onClose, isMe }) => {
                         <span className="text-amber-700 bungee-font text-xs tracking-widest">YOUR SECRET CODE</span>
                         <div className="flex items-center gap-3">
                             <button
-                                onPointerDown={() => setShowMyCode(true)}
-                                onPointerUp={() => setShowMyCode(false)}
-                                onPointerLeave={() => setShowMyCode(false)}
+                                onClick={() => setShowMyCode(v => !v)}
                                 className="w-12 h-12 rounded-full bg-amber-200 hover:bg-amber-300 flex items-center justify-center text-xl transition-all active:scale-95 shadow-sm border-2 border-amber-400"
-                                title="Hold to reveal"
+                                title="Click to reveal/hide"
                             >
                                 {showMyCode ? '🔓' : '🔒'}
                             </button>
@@ -136,11 +134,9 @@ const PlayerInfoCard = ({ player, isTarget, isEliminated, isMe, submittedIds, ty
                             {isMe && player.digits && (
                                 <div className="flex items-center bg-black/20 rounded pl-1.5 pr-2 py-0.5 gap-1 border border-white/10 shadow-inner">
                                     <button
-                                        onPointerDown={() => setShowCode(true)}
-                                        onPointerUp={() => setShowCode(false)}
-                                        onPointerLeave={() => setShowCode(false)}
+                                        onClick={() => setShowCode(v => !v)}
                                         className="text-[10px] active:scale-90 transition-transform outline-none"
-                                        title="Hold to reveal"
+                                        title="Click to reveal/hide"
                                     >
                                         {showCode ? '🔓' : '🔒'}
                                     </button>
@@ -284,7 +280,7 @@ const GameScreen = ({ userName, gameData, onExit }) => {
     const [activePlayers, setActivePlayers] = useState((gameData?.players || []).map(p => p.id))
     const [guessHistory, setGuessHistory] = useState({})
     const [roundResults, setRoundResults] = useState(null)
-    const [winner, setWinner] = useState(null)
+    const [winner, setWinner] = useState(null) // { id, name, digits }
     const [submittedIds, setSubmittedIds] = useState([])
     const [typingIds, setTypingIds] = useState([])
     const [totalGuessers, setTotalGuessers] = useState(0)
@@ -303,51 +299,62 @@ const GameScreen = ({ userName, gameData, onExit }) => {
         onExit()
     }
 
+    // Shared helper – applies a round-started payload into state
+    const applyRoundStarted = useCallback(({ targetId, targetName, roundNumber: rn, expiresAt: exp, activePlayers: ap, digitCount: dc }) => {
+        setCurrentTargetId(targetId)
+        setCurrentTargetName(targetName)
+        setRoundNumber(rn)
+        setExpiresAt(exp)
+        setActivePlayers(ap)
+        setPhase('guessing')
+        setSubmitted(false)
+        setCurrentGuess([])
+        setSubmittedIds([])
+        setTypingIds([])
+        setRoundResults(null)
+        if (dc) setDigitCount(dc)
+        setTotalGuessers(ap.filter(id => id !== targetId).length)
+    }, [])
+
+    // Cloud reveal animation — shorter so guessing starts visible quickly
     useEffect(() => {
-        const t = setTimeout(() => setIsRevealing(false), 3000)
+        const t = setTimeout(() => setIsRevealing(false), 2000)
         return () => clearTimeout(t)
     }, [])
+
+    // If the server fired round-started before this component mounted, apply it now
+    useEffect(() => {
+        if (gameData?.pendingRoundData) {
+            applyRoundStarted(gameData.pendingRoundData)
+        }
+    }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
     useEffect(() => {
         const socket = socketRef.current
         if (!socket) return
 
-        socket.on('round-started', ({ targetId, targetName, roundNumber, expiresAt, activePlayers, digitCount: dc }) => {
-            setCurrentTargetId(targetId)
-            setCurrentTargetName(targetName)
-            setRoundNumber(roundNumber)
-            setExpiresAt(expiresAt)
-            setActivePlayers(activePlayers)
-            setPhase('guessing')
-            setSubmitted(false)
-            setCurrentGuess([])
-            setSubmittedIds([])
-            setTypingIds([])
-            setRoundResults(null)
-            if (dc) setDigitCount(dc)
-            setTotalGuessers(activePlayers.filter(id => id !== targetId).length)
-        })
+        socket.on('round-started', (data) => applyRoundStarted(data))
 
         socket.on('guess-made', ({ guesserSocketId, submittedCount, totalGuessers }) => {
             setSubmittedIds(prev => [...new Set([...prev, guesserSocketId])])
             setTotalGuessers(totalGuessers)
         })
 
-        socket.on('round-complete', ({ results, targetId, targetName, targetEliminated, guessHistory, activePlayers, gameOver, winnerId, winnerName }) => {
+        socket.on('round-complete', ({ results, targetId, targetName, targetDigits, targetEliminated, guessHistory, activePlayers, gameOver, winnerId, winnerName, winnerDigits }) => {
             setGuessHistory(guessHistory)
             setActivePlayers(activePlayers)
-            setRoundResults({ results, targetId, targetName, targetEliminated })
+            setRoundResults({ results, targetId, targetName, targetDigits, targetEliminated })
             setPhase('results')
             if (gameOver) {
                 setTimeout(() => {
-                    setWinner({ id: winnerId, name: winnerName })
+                    setWinner({ id: winnerId, name: winnerName, digits: winnerDigits })
                     setPhase('gameover')
                 }, 3000)
             }
         })
 
-        socket.on('game-over', ({ winnerId, winnerName }) => {
-            setWinner({ id: winnerId, name: winnerName })
+        socket.on('game-over', ({ winnerId, winnerName, winnerDigits }) => {
+            setWinner({ id: winnerId, name: winnerName, digits: winnerDigits })
             setPhase('gameover')
         })
 
@@ -620,11 +627,31 @@ const GameScreen = ({ userName, gameData, onExit }) => {
             {/* ══ GAME OVER ══ */}
             {phase === 'gameover' && winner && (
                 <div className="flex-1 flex flex-col items-center justify-center gap-6 z-10 px-4">
-                    <div className="text-center">
-                        <p className="text-white/70 bungee-font text-sm tracking-widest">GAME OVER</p>
-                        <h1 className="text-white bungee-font text-5xl sm:text-6xl drop-shadow-lg mt-2">
+                    <div className="text-center flex flex-col items-center gap-3">
+                        <p className="text-white/70 bungee-font text-sm tracking-widest animate-pulse">🎮 GAME OVER</p>
+                        <h1 className="text-white bungee-font text-4xl sm:text-5xl drop-shadow-lg">
                             {winner.id === myId ? '🏆 YOU WIN!' : `🥇 ${winner.name} WINS!`}
                         </h1>
+                        {/* Winner section */}
+                        <div className="bg-white/20 backdrop-blur-md rounded-3xl px-8 py-5 border-2 border-yellow-300/60 shadow-[0_0_30px_rgba(253,224,71,0.25)] flex flex-col items-center gap-3 mt-2 animate-bounce-in">
+                            <p className="text-yellow-300 bungee-font text-xs tracking-widest">🏆 WINNER</p>
+                            <div className="w-20 h-20 rounded-full bg-yellow-300 flex items-center justify-center bungee-font text-green-900 text-4xl shadow-lg winner-glow">
+                                {winner.name?.[0]?.toUpperCase()}
+                            </div>
+                            <p className="text-white bungee-font text-2xl">{winner.name}</p>
+                            {winner.digits && (
+                                <div className="flex flex-col items-center gap-2">
+                                    <p className="text-white/60 bungee-font text-[10px] tracking-widest">WINNING CODE</p>
+                                    <div className="flex gap-2">
+                                        {winner.digits.map((d, i) => (
+                                            <div key={`wd-${i}`} className="w-12 h-14 rounded-2xl bg-yellow-300 border-4 border-yellow-400 flex items-center justify-center bungee-font text-green-900 text-2xl shadow-md">
+                                                {d}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
                     </div>
                     <button onClick={handleLeave}
                         className="py-5 px-10 rounded-2xl bg-[#FFC107] hover:bg-[#FFB300] text-[#5D4037] bungee-font text-xl shadow-[0_6px_0_0_#FFA000] active:shadow-none active:translate-y-1.5 transition-all">
@@ -692,19 +719,29 @@ const GameScreen = ({ userName, gameData, onExit }) => {
 
                         {/* Waiting */}
                         {phase === 'waiting' && (
-                            <div className="text-center">
-                                <p className="text-white bungee-font text-xl sm:text-2xl drop-shadow">⏳ STARTING ROUND...</p>
-                                <p className="text-white/60 bungee-font text-sm mt-1">Get ready!</p>
+                            <div className="flex flex-col items-center gap-4 text-center">
+                                <div className="w-20 h-20 rounded-full border-4 border-white/30 border-t-white animate-spin-slow" />
+                                <div>
+                                    <p className="text-white bungee-font text-xl sm:text-2xl drop-shadow">STARTING ROUND...</p>
+                                    <p className="text-white/60 bungee-font text-sm mt-1">Get ready!</p>
+                                </div>
                             </div>
                         )}
 
                         {/* Round results */}
                         {phase === 'results' && roundResults && (
-                            <div className="w-full max-w-sm bg-white/95 rounded-3xl p-4 sm:p-5 shadow-2xl">
+                            <div className="w-full max-w-sm bg-white/95 rounded-3xl p-4 sm:p-5 shadow-2xl animate-fade-up">
                                 <p className="text-green-700 bungee-font text-xs tracking-widest mb-3 text-center">ROUND {roundNumber} RESULTS</p>
                                 {roundResults.targetEliminated && (
                                     <div className="bg-red-50 border-2 border-red-200 rounded-2xl px-3 py-2 text-center mb-3">
                                         <p className="text-red-500 bungee-font text-sm">💥 {roundResults.targetName} ELIMINATED!</p>
+                                        {roundResults.targetDigits && (
+                                            <div className="flex gap-1.5 justify-center mt-2">
+                                                {roundResults.targetDigits.map((d, i) => (
+                                                    <div key={`td-${i}`} className="w-8 h-8 rounded-lg bg-red-200 border-2 border-red-300 flex items-center justify-center bungee-font text-red-700 text-sm">{d}</div>
+                                                ))}
+                                            </div>
+                                        )}
                                     </div>
                                 )}
                                 <div className="flex flex-col gap-2 max-h-48 overflow-y-auto pr-1 hide-scroll">
@@ -722,7 +759,7 @@ const GameScreen = ({ userName, gameData, onExit }) => {
                                     ))}
                                     {roundResults.results.length === 0 && <p className="text-gray-400 text-xs text-center py-2">No guesses submitted.</p>}
                                 </div>
-                                <p className="text-green-400 bungee-font text-[10px] text-center mt-3">Next round starting...</p>
+                                <p className="text-green-400 bungee-font text-[10px] text-center mt-3 animate-pulse">Next round starting...</p>
                             </div>
                         )}
 

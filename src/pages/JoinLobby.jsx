@@ -124,6 +124,9 @@ const JoinLobby = ({ userName, onGameStart, onExit }) => {
                 socket.on('game-started', ({ players, digitCount: dc }) => {
                     localStorage.setItem(LAST_ROOM_KEY, JSON.stringify({ roomCode: finalCode, playerName: userName }))
                     transitioningRef.current = true
+                    // Pre-capture round-started to avoid race condition in GameScreen mount
+                    let pendingRoundData = null
+                    socket.once('round-started', (data) => { pendingRoundData = data })
                     setTimeout(() => onGameStart({
                         players,
                         socket,
@@ -132,6 +135,7 @@ const JoinLobby = ({ userName, onGameStart, onExit }) => {
                         spectator: false,
                         rejoined: false,
                         digitCount: dc || 4,
+                        pendingRoundData,
                     }), 300)
                 })
             } else {
